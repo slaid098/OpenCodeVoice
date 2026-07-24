@@ -251,6 +251,14 @@ function findComposer(): HTMLElement | null {
   for (const selector of COMPOSER_SELECTORS) {
     const el = document.querySelector<HTMLElement>(selector);
     if (el) {
+      // session-prompt-dock — общий wrapper для question-dock и composer;
+      // если внутри question-dock, не использовать как composer-target
+      if (
+        el.getAttribute("data-component") === "session-prompt-dock" &&
+        el.querySelector('[data-component="session-question-dock"]')
+      ) {
+        continue;
+      }
       console.log(`[ocvd] Composer found via ${selector}`);
       return el;
     }
