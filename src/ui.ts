@@ -308,6 +308,10 @@ function injectIntoElement(
 }
 
 function injectIntoComposer(onToggle: (target: InsertTarget) => void, onCancel: () => void): void {
+  // Не вставлять composer-кнопку, если открыт question-prompt с textarea «Свой ответ»
+  if (document.querySelector('[data-slot="question-custom-input"]')) {
+    return;
+  }
   const composer = findComposer();
   if (composer) {
     injectIntoElement(composer, onToggle, onCancel, "composer");
