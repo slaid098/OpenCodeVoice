@@ -1,7 +1,7 @@
 # ADR 0004: Composer-target guard checks for real input inside dock (child session)
 
 - **Date**: 2026-07-26
-- **PR**: <PR-NUMBER>
+- **PR**: 33
 - **Parent PR**: #31
 - **Issue**: #32
 

@@ -1,5 +1,5 @@
 ---
-pr_number: <PR-NUMBER>
+pr_number: 33
 branch: fix/ui/child-session-composer-guard
 parent_pr: 31
 title: skip composer injection in child session (subagent)
@@ -7,7 +7,7 @@ status: open
 created: 2026-07-26
 ---
 
-# Handoff — PR <PR-NUMBER>: skip composer injection in child session
+# Handoff — PR 33: skip composer injection in child session
 
 ## Контекст
 
@@ -97,7 +97,7 @@ if (
 
 ## ADR
 
-См. `docs/decisions/0004-pr-<PR-NUMBER>-child-session-composer-guard.md`.
+См. `docs/decisions/0004-pr-33-child-session-composer-guard.md`.
 
 ## Источники
 
