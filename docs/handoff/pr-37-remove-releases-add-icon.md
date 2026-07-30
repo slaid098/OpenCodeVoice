@@ -1,5 +1,5 @@
 ---
-pr_number: <PR-NUMBER>
+pr_number: 37
 branch: refactor/remove-releases-add-icon
 issue: 36
 title: remove GitHub releases, add icon, standardize README
@@ -7,7 +7,7 @@ status: open
 created: 2026-07-30
 ---
 
-# Handoff — PR <PR-NUMBER>: remove GitHub releases, add icon, standardize README
+# Handoff — PR 37: remove GitHub releases, add icon, standardize README
 
 ## Что сделано
 
@@ -60,10 +60,10 @@ created: 2026-07-30
 ### `docs/project-map/github.md`
 - `release.yml` → `deploy.yml`, убрано «GitHub Release», `last_updated` 2026-07-30, `purpose: CI workflows, dependabot, deploy`.
 
-### `docs/decisions/0005-pr-<PR-NUMBER>-remove-releases-add-icon.md` (новый)
+### `docs/decisions/0005-pr-37-remove-releases-add-icon.md` (новый)
 - ADR 0005: 4 секции (Статус/Контекст/Решение/Альтернативы) + Последствия + Источники.
 
-### `docs/handoff/pr-<PR-NUMBER>-remove-releases-add-icon.md` (новый)
+### `docs/handoff/pr-37-remove-releases-add-icon.md` (новый)
 - Этот handoff.
 
 ### Файлы вне изменений
@@ -80,7 +80,7 @@ created: 2026-07-30
 
 ## ADR
 
-См. `docs/decisions/0005-pr-<PR-NUMBER>-remove-releases-add-icon.md`.
+См. `docs/decisions/0005-pr-37-remove-releases-add-icon.md`.
 
 ## Источники
 

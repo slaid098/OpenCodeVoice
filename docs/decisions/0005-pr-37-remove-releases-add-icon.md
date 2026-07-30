@@ -1,7 +1,7 @@
 # ADR 0005: Remove GitHub Releases, add icon, standardize README
 
 - **Date**: 2026-07-30
-- **PR**: <PR-NUMBER>
+- **PR**: 37
 - **Issue**: #36
 
 ## Статус
