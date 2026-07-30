@@ -1,5 +1,5 @@
 ---
-pr_number: <PR-NUMBER>
+pr_number: 39
 branch: docs/align-readme-checker
 issue: 38
 title: align README with updated create-readme checker
@@ -7,7 +7,7 @@ status: open
 created: 2026-07-30
 ---
 
-# Handoff — PR <PR-NUMBER>: align README with updated create-readme checker
+# Handoff — PR 39: align README with updated create-readme checker
 
 ## Что сделано
 
@@ -15,7 +15,7 @@ created: 2026-07-30
 
 - **`docs(readme): regenerate README with tagline_en/ru delimiters`** — `README.md` пересобран по новому стандарту `create-readme` (skill `repo-readme` §5): добавлены две пары delimiter-тегов `<!-- tagline-en:start -->`/`<!-- tagline-en:end -->` и `<!-- tagline-ru:start -->`/`<!-- tagline-ru:end -->` с EN/RU tagline (новое требование из #149, #151, #153, aa48fd7 — отсутствовало в PR #37). Существующие 4 пары `summary-en`/`features-en`/`summary-ru`/`features-ru` сохранены. H1 `# 🚀 opencode-voice-dictation` (prefix корректен). Quick Start / Быстрый старт — по 4 кликабельных шага, без bash-блока (`include_clone: false` + `quick_start: ""`). Секция `## License` отсутствует (блокируется новым чекером как дубликат GitHub sidebar). `create-readme` (mode: validate) проходит: ✅ README structure is valid. Diff: +5 строк (только tagline-теги), остальной контент уже соответствовал PR #37.
 
-- **`docs(repo): add ADR and handoff for readme alignment`** — `docs/decisions/0006-pr-<PR-NUMBER>-align-readme-checker.md` (ADR 0006: Статус/Контекст/Решение/Альтернативы/Последствия/Источники) + этот handoff. Placeholder `<PR-NUMBER>` в frontmatter и заголовках — будет заменён на реальный номер коммитом `docs(handoff): set PR number` после `create-pr`.
+- **`docs(repo): add ADR and handoff for readme alignment`** — `docs/decisions/0006-pr-39-align-readme-checker.md` (ADR 0006: Статус/Контекст/Решение/Альтернативы/Последствия/Источники) + этот handoff. Placeholder `<PR-NUMBER>` в frontmatter и заголовках заменён на реальный номер 39 коммитом `docs(handoff): set PR number` после `create-pr`.
 
 Workaround бага #148 (`create-readme` create mode не перезаписывает существующий локальный README): локальный `create` вызван с полным набором параметров нового стандарта — тулза вернула успех, но `git diff` пуст, mtime не изменился (bug подтверждён). README собран вручную через Write по шаблону SKILL.md §5, затем `validate` прошёл. Remote-режим (`repo:`) НЕ использовался — пишет напрямую на main, минуя PR-процесс.
 
@@ -31,7 +31,7 @@ Workaround бага #148 (`create-readme` create mode не перезаписы�
 - После merge: проверить витрину slaid098.dev — карточка `opencode-voice-dictation` должна подтянуть tagline EN/RU из нового README (между `<!-- tagline-en:start -->`/`<!-- tagline-ru:end -->`). Раньше tagline не парсился (delimiter-тегов не было).
 - После merge: запустить `create-readme` (mode: validate) на fresh main — должен пройти (проверка, что merge не нарушил структуру).
 - Issue #148 (`create-readme` create не перезаписывает локальный README) — остаётся открытым. Workaround (ручная сборка + validate) задокументирован в ADR 0006, применим для будущих PR пока #148 не пофикшен.
-- Placeholder `<PR-NUMBER>` в `docs/decisions/0006-pr-<PR-NUMBER>-align-readme-checker.md` (filename + frontmatter + заголовок) и в этом handoff (frontmatter + заголовок + body) — заменить на реальный PR-номер коммитом `docs(handoff): set PR number` после `create-pr`, затем push.
+- Placeholder `<PR-NUMBER>` в `docs/decisions/0006-pr-39-align-readme-checker.md` (filename + frontmatter + заголовок) и в этом handoff (frontmatter + заголовок + body) заменён на реальный PR-номер 39 коммитом `docs(handoff): set PR number` после `create-pr`, затем push.
 
 ## Watch out
 

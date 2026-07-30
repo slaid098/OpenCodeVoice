@@ -1,7 +1,7 @@
 # ADR 0006: Align README with updated create-readme checker
 
 - **Date**: 2026-07-30
-- **PR**: <PR-NUMBER>
+- **PR**: 39
 - **Issue**: #38
 
 ## Статус
