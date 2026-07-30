@@ -31,9 +31,7 @@ A Tampermonkey/Violentmonkey userscript — a mic button in the OpenCode web UI.
 <!-- features-en:end -->
 
 ### ⚡ Quick Start
-```bash
-# No build step — install the userscript via the link in step 1 below
-```
+
 1. Install [Tampermonkey](https://www.tampermonkey.net/)
 2. Get a key at [console.groq.com/keys](https://console.groq.com/keys)
 3. Open the [script install link](https://raw.githubusercontent.com/slaid098/opencode-voice-dictation/dist/opencode-voice-dictation.user.js) — it installs into Tampermonkey
@@ -67,9 +65,7 @@ A Tampermonkey/Violentmonkey userscript — a mic button in the OpenCode web UI.
 <!-- features-ru:end -->
 
 ### ⚡ Быстрый старт
-```bash
-# No build step — install the userscript via the link in step 1 below
-```
+
 1. Установи [Tampermonkey](https://www.tampermonkey.net/)
 2. Получи ключ на [console.groq.com/keys](https://console.groq.com/keys)
 3. Открой [ссылку установки скрипта](https://raw.githubusercontent.com/slaid098/opencode-voice-dictation/dist/opencode-voice-dictation.user.js) — скрипт установится в Tampermonkey
