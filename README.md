@@ -49,12 +49,12 @@ Groq may block direct requests from some networks. Point the script at your own 
 
 1. Deploy an nginx reverse proxy that forwards to `api.groq.com`:
    ```nginx
-   location /groq/ {
-       proxy_pass https://api.groq.com/;
+   location / {
+       proxy_pass https://api.groq.com:443;
        proxy_set_header Host api.groq.com;
    }
    ```
-2. Tampermonkey menu → **Set STT Endpoint** → paste `https://your-domain.com/groq/openai/v1/audio/transcriptions`
+2. Tampermonkey menu → **Set STT Endpoint** → paste `https://your-domain.com/openai/v1/audio/transcriptions`
 3. Requests now go through your proxy. The userscript metadata uses `@connect *`, so any domain is allowed.
 
 ### 🌡️ Temperature
