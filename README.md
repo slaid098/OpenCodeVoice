@@ -111,12 +111,12 @@ Groq может блокировать прямые запросы из неко
 
 1. Разверни nginx reverse proxy, который форвардит на `api.groq.com`:
    ```nginx
-   location /groq/ {
-       proxy_pass https://api.groq.com/;
+   location / {
+       proxy_pass https://api.groq.com:443;
        proxy_set_header Host api.groq.com;
    }
    ```
-2. Меню Tampermonkey → **Set STT Endpoint** → вставь `https://your-domain.com/groq/openai/v1/audio/transcriptions`
+2. Меню Tampermonkey → **Set STT Endpoint** → вставь `https://your-domain.com/openai/v1/audio/transcriptions`
 3. Запросы пойдут через твой прокси. Метаблок юзерскрипта использует `@connect *`, поэтому разрешён любой домен.
 
 ### 🌡️ Temperature
