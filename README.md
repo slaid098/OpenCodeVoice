@@ -57,6 +57,8 @@ Groq may block direct requests from some networks. Point the script at your own 
 2. Tampermonkey menu → **Set STT Endpoint** → paste `https://your-domain.com/openai/v1/audio/transcriptions`
 3. Requests now go through your proxy. The userscript metadata uses `@connect *`, so any domain is allowed.
 
+A path prefix is not needed if the domain is dedicated to Groq. The `/groq` variant stays valid for multi-proxy domains — `location /groq/` with a trailing slash strips the prefix.
+
 ### 🌡️ Temperature
 
 Whisper may hallucinate on silence/noise. **Set Temperature** (default `0` = deterministic, range `0`–`1`) reduces hallucinations.
@@ -118,6 +120,8 @@ Groq может блокировать прямые запросы из неко
    ```
 2. Меню Tampermonkey → **Set STT Endpoint** → вставь `https://your-domain.com/openai/v1/audio/transcriptions`
 3. Запросы пойдут через твой прокси. Метаблок юзерскрипта использует `@connect *`, поэтому разрешён любой домен.
+
+Префикс пути не нужен, если домен выделен только под Groq. `/groq`-вариант остаётся валидным для мульти-прокси доменов — `location /groq/` с trailing slash срезает префикс.
 
 ### 🌡️ Temperature
 
