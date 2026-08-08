@@ -224,17 +224,17 @@ function init(): void {
     void toggleDictation(isQuestionPromptOpen() ? "question" : "composer");
   });
 
-  registerMenuCommands({
-    onSetKey: promptForApiKey,
-    onToggleAutoSubmit: toggleAutoSubmit,
-    onSetModel: promptForModel,
-    onSetLanguage: promptForLanguage,
-    onSetPrompt: promptForWhisperPrompt,
-    onSetEndpoint: promptForEndpoint,
-    onSetTemperature: promptForTemperature,
-  });
-
   checkFirstRun();
 }
+
+registerMenuCommands({
+  onSetKey: promptForApiKey,
+  onToggleAutoSubmit: toggleAutoSubmit,
+  onSetModel: promptForModel,
+  onSetLanguage: promptForLanguage,
+  onSetPrompt: promptForWhisperPrompt,
+  onSetEndpoint: promptForEndpoint,
+  onSetTemperature: promptForTemperature,
+});
 
 init();

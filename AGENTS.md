@@ -23,6 +23,10 @@ The `dist` branch is the **only** distribution channel for the userscript. Deplo
 
 `vite.config.ts` `userscript.icon` → `main/assets/icon.png` (128×128 PNG RGBA). Do NOT delete `assets/icon.png` and do NOT change the path without editing both the file location and the `icon` URL in sync.
 
+## `@namespace`
+
+`vite.config.ts` `userscript.namespace` — это ИДЕНТИФИКАТОР скрипта для userscript-менеджеров (Tampermonkey/Violentmonkey используют пару `@name` + `@namespace` для дедупликации, Greasemonkey-стандарт). НЕ функциональный URL — менеджеры НЕ резолвят его. НЕ менять при миграции хоста (GitHub → Forgejo) — смена namespace = userscript-менеджер видит «новый» скрипт → дубликат вместо обновления.
+
 ## Composer selectors (brief)
 
 `COMPOSER_SELECTORS` in `src/ui.ts` — order = detection priority (primary → fallback). Current order: `prompt-input-v2` → `session-prompt-dock` → `session-new-composer` → `session-composer`. Do NOT change the order without an ADR. `session-prompt-dock` is a wrapper for three conditionally-rendered blocks; the guard checks for a real composer (`prompt-input`/`prompt-input-v2`) inside the dock. See ADR 0001–0004 in `docs/decisions/`.
