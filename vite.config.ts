@@ -7,8 +7,8 @@ export default defineConfig({
       entry: "src/index.ts",
       userscript: {
         name: "OpenCode Voice Dictation",
-        namespace: "https://github.com/slaid098/opencode-voice-dictation",
-        version: "1.0.5",
+        namespace: "https://git.slaid098.dev/slaid098/opencode-voice-dictation",
+        version: "1.0.6",
         description:
           "Voice dictation for OpenCode web using Whisper (Groq API) - works on PC and mobile",
         author: "slaid098",
@@ -16,11 +16,11 @@ export default defineConfig({
         grant: ["GM_xmlhttpRequest", "GM_getValue", "GM_setValue", "GM_registerMenuCommand"],
         connect: ["*"],
         "run-at": "document-idle",
-        icon: "https://raw.githubusercontent.com/slaid098/opencode-voice-dictation/main/assets/icon.png",
+        icon: "https://git.slaid098.dev/slaid098/opencode-voice-dictation/raw/branch/main/assets/icon.png",
         updateURL:
-          "https://raw.githubusercontent.com/slaid098/opencode-voice-dictation/dist/opencode-voice-dictation.meta.js",
+          "https://git.slaid098.dev/slaid098/opencode-voice-dictation/raw/branch/dist/opencode-voice-dictation.meta.js",
         downloadURL:
-          "https://raw.githubusercontent.com/slaid098/opencode-voice-dictation/dist/opencode-voice-dictation.user.js",
+          "https://git.slaid098.dev/slaid098/opencode-voice-dictation/raw/branch/dist/opencode-voice-dictation.user.js",
       },
       build: {
         fileName: "opencode-voice-dictation.user.js",

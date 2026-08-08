@@ -17,7 +17,7 @@ Desync (bumping only one file) = userscript managers (Tampermonkey/Violentmonkey
 
 ## Dist deploy
 
-The `dist` branch is the **only** distribution channel for the userscript. Deploy happens via `deploy.yml` (`peaceiris/actions-gh-pages@v4`) on push to `main`. GitHub Releases were removed (PR#37, ADR-0005). `@updateURL`/`@downloadURL` point to raw files on the `dist` branch — bumping `@version` + deploying to `dist` is sufficient for auto-update.
+The `dist` branch is the **only** distribution channel for the userscript. Deploy happens via `deploy.yml` (plain `git push --force` to an orphan `dist` branch) on push to `main`. GitHub Releases were removed (PR#37, ADR-0005). `@updateURL`/`@downloadURL` point to raw files on the `dist` branch hosted on Forgejo (`git.slaid098.dev`) — bumping `@version` + deploying to `dist` is sufficient for auto-update.
 
 ## `@icon`
 

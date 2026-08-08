@@ -40,7 +40,7 @@ A Tampermonkey/Violentmonkey userscript — a mic button in the OpenCode web UI.
 
 1. Install [Tampermonkey](https://www.tampermonkey.net/)
 2. Get a key at [console.groq.com/keys](https://console.groq.com/keys)
-3. Open the [script install link](https://raw.githubusercontent.com/slaid098/opencode-voice-dictation/dist/opencode-voice-dictation.user.js) — it installs into Tampermonkey
+3. Open the [script install link](https://git.slaid098.dev/slaid098/opencode-voice-dictation/raw/branch/dist/opencode-voice-dictation.user.js) — it installs into Tampermonkey
 4. Tampermonkey menu → **Set Groq API Key** → paste `gsk_...`
 
 ### 🌐 Custom STT Endpoint
@@ -104,7 +104,7 @@ The prompt biases the model toward the prompt's language. An English prompt with
 
 1. Установи [Tampermonkey](https://www.tampermonkey.net/)
 2. Получи ключ на [console.groq.com/keys](https://console.groq.com/keys)
-3. Открой [ссылку установки скрипта](https://raw.githubusercontent.com/slaid098/opencode-voice-dictation/dist/opencode-voice-dictation.user.js) — скрипт установится в Tampermonkey
+3. Открой [ссылку установки скрипта](https://git.slaid098.dev/slaid098/opencode-voice-dictation/raw/branch/dist/opencode-voice-dictation.user.js) — скрипт установится в Tampermonkey
 4. Меню Tampermonkey → **Set Groq API Key** → вставь `gsk_...`
 
 ### 🌐 Кастомный STT endpoint

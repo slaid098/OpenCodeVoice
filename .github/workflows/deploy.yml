@@ -12,6 +12,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v6
         with:
@@ -36,9 +38,14 @@ jobs:
         run: npm run build
 
       - name: Deploy to dist branch
-        uses: peaceiris/actions-gh-pages@v4
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./dist
-          publish_branch: dist
-          keep_files: false
+        run: |
+          cd dist
+          git init -b dist
+          git config user.name "forgejo-actions"
+          git config user.email "actions@noreply.git.slaid098.dev"
+          git add -A
+          git commit -m "deploy: ${GITHUB_SHA::7}"
+          git remote add origin "https://${GITHUB_TOKEN}@git.slaid098.dev/slaid098/opencode-voice-dictation.git"
+          git push --force origin dist
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
