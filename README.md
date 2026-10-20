@@ -68,7 +68,7 @@ Open the panel with the gear button next to the microphone.
 
 ### ⚡ Quick Start
 
-1. Install [Tampermonkey](https://www.tampermonkey.net/) or [Violentmonkey](https://violentmonkey.github.io/).
+1. Install a userscript manager: on a phone, the tested combination is Firefox + [Tampermonkey](https://www.tampermonkey.net/); on a desktop, any browser where [Tampermonkey](https://www.tampermonkey.net/) or [Violentmonkey](https://violentmonkey.github.io/) can be installed.
 2. **[Install OpenCodeVoice](https://raw.githubusercontent.com/slaid098/OpenCodeVoice/dist/opencode-voice-dictation.user.js)**.
 3. Open the OpenCode 2 web interface and click the gear button next to the microphone.
 4. Paste a Groq API key — a free one is available at [console.groq.com/keys](https://console.groq.com/keys) — or choose a custom endpoint and fill in its URL and model.
@@ -140,7 +140,7 @@ npm run build
 
 ### ⚡ Быстрый старт
 
-1. Установите [Tampermonkey](https://www.tampermonkey.net/) или [Violentmonkey](https://violentmonkey.github.io/).
+1. Установите менеджер userscript: на телефоне проверенная связка — Firefox + [Tampermonkey](https://www.tampermonkey.net/); на компьютере — любой браузер, где ставятся [Tampermonkey](https://www.tampermonkey.net/) или [Violentmonkey](https://violentmonkey.github.io/).
 2. **[Установите OpenCodeVoice](https://raw.githubusercontent.com/slaid098/OpenCodeVoice/dist/opencode-voice-dictation.user.js)**.
 3. Откройте веб-интерфейс OpenCode 2 и нажмите шестерёнку рядом с микрофоном.
 4. Вставьте API-ключ Groq — бесплатный можно получить на [console.groq.com/keys](https://console.groq.com/keys) — или выберите свой адрес и укажите его URL и модель.
