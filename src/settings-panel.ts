@@ -86,9 +86,9 @@ export function createSettingsPanel(deps: SettingsPanelDeps): SettingsPanel {
   const scriptVersion = (): string => {
     try {
       const version = GM_info?.script?.version;
-      return typeof version === "string" && version !== "" ? version : "0.9.4";
+      return typeof version === "string" && version !== "" ? version : "0.9.5";
     } catch {
-      return "0.9.4";
+      return "0.9.5";
     }
   };
 
@@ -406,6 +406,7 @@ export function createSettingsPanel(deps: SettingsPanelDeps): SettingsPanel {
 .icon-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .tabs {
   display: flex;
+  flex: 0 0 auto;
   gap: 6px;
   overflow-x: auto;
   padding: 8px 12px;

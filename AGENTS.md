@@ -100,6 +100,7 @@ Auto-submit is global, on by default, and is the primary mode. Do NOT add per-re
 ## Settings panel layout
 
 - The sheet has a fixed height, not `max-height`: `92dvh` on mobile and `min(86dvh, 760px)` from 760 px. Tab switching must not move the top edge.
+- The `.tabs` row is a flex item of the fixed-height sheet: keep `flex: 0 0 auto`. Without it the row behaves as a scroll container with a zero min-height, flex-shrink squeezes it when the active tab is tall, and the tabs plus their bottom border jump between tabs.
 - `renderContent()` resets `contentEl.scrollTop` so a new tab opens at the top.
 - At `max-width: 520px` the four tabs are a 2×2 grid (no horizontal scroll); at `max-width: 480px` the password/model rows and footer wrap, inputs and the Save button take the full width. Buttons use `white-space: nowrap`.
 - Native `<option>` elements need explicit `background: var(--bg)` and `color: var(--fg)`; without it provider names can be white-on-white in the light theme.

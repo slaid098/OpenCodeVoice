@@ -213,7 +213,7 @@ describe("opening and closing", () => {
     expect(sheet.getAttribute("role")).toBe("dialog");
     expect(sheet.getAttribute("aria-modal")).toBe("true");
     expect(root().querySelector(".title")?.textContent).toBe("Голосовой ввод");
-    expect(root().querySelector(".subtitle")?.textContent).toBe("OpenCode 2 · v0.9.4");
+    expect(root().querySelector(".subtitle")?.textContent).toBe("OpenCode 2 · v0.9.5");
     expect(root().querySelector('.tab[data-tab="stt"]')?.getAttribute("aria-selected")).toBe(
       "true",
     );
@@ -310,6 +310,9 @@ describe("tabs and draft", () => {
     expect(css).toContain("height: 92dvh");
     expect(css).toContain("height: min(86dvh, 760px)");
     expect(css).not.toContain("max-height: 86dvh");
+    // The tab row must not shrink when a tab with tall content is open;
+    // otherwise its border and the tabs jump between tabs.
+    expect(css).toMatch(/\.tabs \{[^}]*flex: 0 0 auto;/);
     expect(css).toContain("@media (max-width: 520px)");
     expect(css).toContain("grid-template-columns: repeat(2, minmax(0, 1fr))");
     expect(css).toContain("@media (max-width: 480px)");
@@ -852,7 +855,7 @@ describe("diagnostics tab", () => {
     await vi.waitFor(() => {
       expect(root().textContent).toContain("Сохранённых ошибок нет.");
     });
-    expect(root().textContent).toContain("0.9.4");
+    expect(root().textContent).toContain("0.9.5");
     expect(root().textContent).toContain("не обнаружена");
     expect(root().textContent).toContain("Composer dock");
     expect(root().textContent).toContain("Микрофон в композере");
