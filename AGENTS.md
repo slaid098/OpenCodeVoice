@@ -75,7 +75,7 @@ Selector status (including whether each mic is present and visible) is exposed i
 
 ## Mobile CSS
 
-The narrow-screen fix lives entirely inside `@media (max-width: 767px)` in `ensureStyle()` (`src/ui.ts`). The model title gets `flex: 1 1 0; min-width: 0` and truncates with an ellipsis, while the agent and variant buttons keep `flex: 0 0 auto`. Do NOT replace this with `position: sticky` — it was explicitly rejected, and desktop styles must remain untouched. Keep the `:has([data-action="composer-model"])` selector and the direct-child fallback.
+The phone fix lives entirely inside `@media (max-width: 767px) and (pointer: coarse) and (hover: none)` in `ensureStyle()` (`src/ui.ts`). The touch-capability conditions are mandatory: a desktop browser must never match this block at any window width or zoom level, because these rules change the composer-controls row. The model title gets `flex: 1 1 0; min-width: 0` and truncates with an ellipsis, while the agent and variant buttons keep `flex: 0 0 auto`. Do NOT replace this with `position: sticky` — it was explicitly rejected, and desktop styles must remain untouched. Keep the `:has([data-action="composer-model"])` selector and the direct-child fallback.
 
 ## Session and draft guards
 

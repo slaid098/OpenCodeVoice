@@ -175,7 +175,8 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
 @media (pointer: coarse) {
   button.ocvd-btn { width: 48px; height: 48px; min-width: 48px; min-height: 48px; }
 }
-@media (max-width: 767px) {
+/* Phone-only: a desktop keeps its native composer controls at every window width. */
+@media (max-width: 767px) and (pointer: coarse) and (hover: none) {
   form[data-component="composer"] [data-slot="composer-controls"] > div {
     width: 100%;
     min-width: 0;

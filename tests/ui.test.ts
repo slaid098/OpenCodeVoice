@@ -361,11 +361,12 @@ describe("composer injection", () => {
     expect(mic?.getAttribute("title")).toBe("Start voice dictation");
   });
 
-  it("ships mobile CSS that shrinks the model title instead of the variant", () => {
+  it("ships phone-only CSS that shrinks the model title instead of the variant", () => {
     const { ui } = makeUi();
     ui.start();
     const css = document.getElementById("ocvd-page-style")?.textContent ?? "";
-    expect(css).toContain("@media (max-width: 767px)");
+    expect(css).toContain("@media (max-width: 767px) and (pointer: coarse) and (hover: none)");
+    expect(css).not.toContain("@media (max-width: 767px) {");
     expect(css).toContain('[data-action="composer-model"]');
     expect(css).toContain("flex: 1 1 0");
     expect(css).not.toContain("position: sticky");
