@@ -21,6 +21,8 @@ Current version: **2.0.0** (OpenCode 2 web only).
 
 The `dist` branch is the **only** distribution channel for the userscript. Deploy happens via `deploy.yml` (plain `git push --force` to an orphan `dist` branch) on push to `main`. GitHub Releases were removed (PR#37, ADR-0005). `@updateURL`/`@downloadURL` point to raw files on the `dist` branch hosted on Forgejo (`git.slaid098.dev`) — bumping `@version` + deploying to `dist` is sufficient for auto-update. Force-push is allowed only to `dist`, never to `main`.
 
+The workflow always pushes `dist` to the GitHub mirror and pushes to Forgejo only when the `FORGEJO_TOKEN` GitHub secret is set (a Forgejo PAT with `write:repository`). Without the secret it emits a warning instead of failing; in that case publish `dist` manually.
+
 ## `@icon`
 
 `vite.config.ts` `userscript.icon` → `main/assets/icon.png` (128×128 PNG RGBA). Do NOT delete `assets/icon.png` and do NOT change the path without editing both the file location and the `icon` URL in sync.
