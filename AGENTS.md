@@ -11,7 +11,7 @@ Bump `version` in **both** files synchronously on every PR touching `src/`, `vit
 
 Desync (bumping only one file) = userscript managers (Tampermonkey/Violentmonkey) do not see the auto-update even though npm sees the new version. Without a bump at all, auto-update never triggers.
 
-Current version: **0.9.0** (pre-1.0, OpenCode 2 web only). 0.9.0 is an intentional downgrade from 2.0.1: userscript managers will not auto-update an installed 2.0.1 to a lower version, so existing copies must be reinstalled manually. Future 0.9.x releases update normally.
+`vite.config.ts` and `package.json` are the source of truth for the current version; do not duplicate the number in docs.
 
 ## i18n
 
@@ -37,7 +37,7 @@ All user-facing strings go through `t()` from `src/i18n.ts`; never hardcode Russ
 
 ## Dist deploy
 
-The `dist` branch is the **only** distribution channel for the userscript. Deploy happens via `deploy.yml` (plain `git push --force` to an orphan `dist` branch) on push to `main`. GitHub Releases were removed (PR#37, ADR-0005). **GitHub (`slaid098/OpenCodeVoice`) is the primary update host**: `@updateURL`/`@downloadURL` point to raw files on the `dist` branch there, and `@icon` points to `main/assets/icon.png`. Forgejo (`git.slaid098.dev`) is a mirror; the workflow pushes there only when the `FORGEJO_TOKEN` secret is set. Bumping `@version` + deploying to `dist` is sufficient for auto-update. Force-push is allowed only to `dist`, never to `main`.
+The `dist` branch is the **only** distribution channel for the userscript. Deploy happens via `deploy.yml` (plain `git push --force` to an orphan `dist` branch) on push to `main`. GitHub Releases were removed (PR#37, ADR-0005). `@updateURL`/`@downloadURL` point to raw files on the `dist` branch of `slaid098/OpenCodeVoice`, and `@icon` points to `main/assets/icon.png`. Bumping `@version` + deploying to `dist` is sufficient for auto-update. Force-push is allowed only to `dist`, never to `main`.
 
 ## `@icon`
 
@@ -45,7 +45,7 @@ The `dist` branch is the **only** distribution channel for the userscript. Deplo
 
 ## `@namespace`
 
-`vite.config.ts` `userscript.namespace` — это ИДЕНТИФИКАТОР скрипта для userscript-менеджеров (Tampermonkey/Violentmonkey используют пару `@name` + `@namespace` для дедупликации, Greasemonkey-стандарт). НЕ функциональный URL — менеджеры НЕ резолвят его. НЕ менять при миграции хоста (GitHub → Forgejo) — смена namespace = userscript-менеджер видит «новый» скрипт → дубликат вместо обновления.
+`vite.config.ts` `userscript.namespace` — это ИДЕНТИФИКАТОР скрипта для userscript-менеджеров (Tampermonkey/Violentmonkey используют пару `@name` + `@namespace` для дедупликации, Greasemonkey-стандарт). НЕ функциональный URL — менеджеры НЕ резолвят его. НЕ менять при смене хостинга или переименовании репозитория — смена namespace = userscript-менеджер видит «новый» скрипт → дубликат вместо обновления.
 
 ## OpenCode 2 selectors
 
@@ -65,7 +65,7 @@ The `dist` branch is the **only** distribution channel for the userscript. Deplo
 
 `findComposerActions()` resolves in order: dock → `composer-actions` slot → composer form → parent of `composer-submit` → visible global actions slot. `ui.ts` injects into the resolved row; if no row exists, it places a floating mic above `form[data-component="composer"]`. Keep these fallbacks: Firefox Android may render the composer without `session-composer-dock`.
 
-`LEGACY_SELECTORS` exists only as a fallback for older 2.0.x builds; do not extend it for OpenCode 1.x — 0.9.0 does not support v1. Composer submit is a synthetic Enter keydown first, with a click on `[data-action="composer-submit"]` as fallback (ADR 0008).
+`LEGACY_SELECTORS` exists only as a fallback for older OpenCode 2 builds; do not extend it for OpenCode 1. Composer submit is a synthetic Enter keydown first, with a click on `[data-action="composer-submit"]` as fallback (ADR 0008).
 
 Question injection picks the container in this order: footer actions → header actions → custom option → legacy form. The mic is placed before the last foreign button in the footer/header, and after the field in the custom option. Keep exactly one question mic and move it when the container changes.
 

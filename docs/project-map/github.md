@@ -13,5 +13,5 @@ last_updated: 2026-10-20
 
 ## Structure
 - `workflows/ci.yml` — CI (lint, typecheck, test, knip)
-- `workflows/deploy.yml` — сборка + деплой в ветку dist (без GitHub Release). GitHub (`slaid098/OpenCodeVoice`) — основной канал обновлений; Forgejo (`git.slaid098.dev`) — зеркало, обновляется только при наличии секрета `FORGEJO_TOKEN`, иначе вручную force-push в `dist`.
+- `workflows/deploy.yml` — сборка + деплой в ветку dist (без GitHub Release). GitHub (`slaid098/OpenCodeVoice`) — канал установки и обновлений.
 - `dependabot.yml` — авто-обновление зависимостей

@@ -16,13 +16,13 @@ last_updated: 2026-10-20
 - `decisions/<NNNN>-<slug>.md` — архитектурные решения (секции: Статус, Контекст, Решение, Альтернативы)
 - `project-map/` — карта структуры проекта (README + по файлу на модуль)
 
-## ADR 2.0.0
+## ADR: OpenCode 2 DOM, LLM cleanup, config v2
 - `0008-opencode-2-dom-and-enter-submit.md` — селекторы OpenCode 2 и отправка через Enter
 - `0009-llm-cleanup-editable-prompt.md` — очистка LLM, редактируемый промпт, reasoning off, fallback
 - `0010-config-v2-retry-and-recovery.md` — конфиг v2, retry-политика, IndexedDB и восстановление
 
-## ADR 0.9.0
-- `0011-i18n-stt-mobile.md` — i18n RU/EN, STT `groq`/`custom`, 403-классификация, мобильный truncate, вопросный микрофон, heartbeat и осознанный downgrade до 0.9.0
+## ADR: i18n, STT providers, mobile
+- `0011-i18n-stt-mobile.md` — i18n RU/EN, STT `groq`/`custom`, 403-классификация, мобильный truncate, вопросный микрофон, heartbeat
 
 ## Patterns
 - Один handoff на PR, slug = тема PR.

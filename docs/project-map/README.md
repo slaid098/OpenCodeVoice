@@ -6,9 +6,9 @@ last_updated: 2026-10-20
 
 # Project Map — OpenCodeVoice
 
-Userscript **0.9.0** для голосовой диктовки в OpenCode 2 web: Whisper (Groq) или Custom URL → необязательная очистка LLM → вставка в композер/question → автоотправка. Интерфейс RU/EN. Точки входа в UI OpenCode 2 задаются в `SELECTORS` (`src/insert.ts`), fallback для ранних 2.0.x — `LEGACY_SELECTORS`.
+Userscript для голосовой диктовки в OpenCode 2 web: Whisper (Groq) или Custom URL → необязательная очистка LLM → вставка в композер/question → автоотправка. Интерфейс RU/EN. Точки входа в UI OpenCode 2 задаются в `SELECTORS` (`src/insert.ts`), fallback для ранних 2.0.x — `LEGACY_SELECTORS`.
 
-GitHub (`slaid098/OpenCodeVoice`) — основной канал установки и обновлений; Forgejo — зеркало. Версия 0.9.0 — осознанный downgrade с 2.0.1, поэтому установленные копии 2.0.1 требуют ручной переустановки.
+GitHub (`slaid098/OpenCodeVoice`) — канал установки и обновлений.
 
 ## Top-level modules
 
