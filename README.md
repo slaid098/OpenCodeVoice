@@ -14,6 +14,16 @@
 
 ## 🇺🇸 English
 
+### ⚡ Quick Start
+
+1. Install a userscript manager: on a phone, Firefox + [Tampermonkey](https://www.tampermonkey.net/); on a computer, any browser where [Tampermonkey](https://www.tampermonkey.net/) or [Violentmonkey](https://violentmonkey.github.io/) can be installed.
+2. **[Install OpenCodeVoice](https://raw.githubusercontent.com/slaid098/OpenCodeVoice/dist/opencode-voice-dictation.user.js)**.
+3. Open the OpenCode 2 web interface and click the gear button next to the microphone.
+4. Paste a Groq API key — a free one is available at [console.groq.com/keys](https://console.groq.com/keys) — or choose a custom endpoint and fill in its URL and model.
+5. Save, tap the microphone, speak, and tap it again.
+
+> On a phone the model name in the composer is shortened so the thinking-mode selector fits next to it. Without that, the selector is pushed off-screen. On a computer the model, thinking-mode, and Plan/Build controls are left as they are.
+
 <!-- summary-en:start -->
 ### ❓ Why
 
@@ -41,7 +51,7 @@ A small userscript that records audio in the browser, sends it to a speech-to-te
 | ♻️ Recovery | Failed recordings and recognized text survive a page reload; retry, insert, or send them later. |
 | 🌍 RU / EN | The interface and the default prompts are available in Russian and English. |
 | ⌨️ Hotkeys | `Ctrl+Space` starts and stops dictation, `Esc` cancels it. |
-| 📱 Responsive | Works in the OpenCode web interface on a computer and on a phone (phone: Firefox). |
+| 📱 Responsive | Works in the OpenCode web interface on a computer and on a phone (Firefox). |
 <!-- features-en:end -->
 
 ### 🎛 Settings
@@ -66,16 +76,6 @@ Open the panel with the gear button next to the microphone.
 - `403` / `451` — the provider blocks the region. Use a custom endpoint with a proxy or another provider.
 - No microphone — browsers allow recording only in a secure context: HTTPS, `localhost`, or `127.0.0.1`. Plain HTTP over a LAN address will not work.
 
-### ⚡ Quick Start
-
-1. Install a userscript manager: on a phone, Firefox + [Tampermonkey](https://www.tampermonkey.net/); on a computer, any browser where [Tampermonkey](https://www.tampermonkey.net/) or [Violentmonkey](https://violentmonkey.github.io/) can be installed.
-2. **[Install OpenCodeVoice](https://raw.githubusercontent.com/slaid098/OpenCodeVoice/dist/opencode-voice-dictation.user.js)**.
-3. Open the OpenCode 2 web interface and click the gear button next to the microphone.
-4. Paste a Groq API key — a free one is available at [console.groq.com/keys](https://console.groq.com/keys) — or choose a custom endpoint and fill in its URL and model.
-5. Save, tap the microphone, speak, and tap it again.
-
-> On a phone the model name in the composer is shortened so the thinking-mode selector fits next to it. Without that, the selector is pushed off-screen. On a computer the model, thinking-mode, and Plan/Build controls are left as they are.
-
 ### 🛠 Development
 
 ```bash
@@ -87,6 +87,16 @@ npm run build
 ```
 
 ## 🇷🇺 Русский
+
+### ⚡ Быстрый старт
+
+1. Установите менеджер userscript: на телефоне — Firefox + [Tampermonkey](https://www.tampermonkey.net/); на компьютере — любой браузер, где ставятся [Tampermonkey](https://www.tampermonkey.net/) или [Violentmonkey](https://violentmonkey.github.io/).
+2. **[Установите OpenCodeVoice](https://raw.githubusercontent.com/slaid098/OpenCodeVoice/dist/opencode-voice-dictation.user.js)**.
+3. Откройте веб-интерфейс OpenCode 2 и нажмите шестерёнку рядом с микрофоном.
+4. Вставьте API-ключ Groq — бесплатный можно получить на [console.groq.com/keys](https://console.groq.com/keys) — или выберите свой адрес и укажите его URL и модель.
+5. Сохраните, нажмите микрофон, говорите и нажмите его снова.
+
+> На телефоне название модели в композере сокращается, чтобы рядом поместился выбор режима мышления. Иначе он уезжает за край экрана. На компьютере модель, выбор режима мышления и переключатель Plan/Build не меняются.
 
 <!-- summary-ru:start -->
 ### ❓ Зачем
@@ -115,7 +125,7 @@ npm run build
 | ♻️ Восстановление | Неудачные записи и распознанный текст переживают перезагрузку страницы: их можно повторить, вставить или отправить позже. |
 | 🌍 RU / EN | Интерфейс и стандартные промпты доступны на русском и английском. |
 | ⌨️ Горячие клавиши | `Ctrl+Space` запускает и останавливает диктовку, `Esc` отменяет её. |
-| 📱 Адаптивность | Работает в веб-интерфейсе OpenCode на компьютере и телефоне (телефон: Firefox). |
+| 📱 Адаптивность | Работает в веб-интерфейсе OpenCode на компьютере и телефоне (Firefox). |
 <!-- features-ru:end -->
 
 ### 🎛 Настройки
@@ -139,16 +149,6 @@ npm run build
 - `401` — API-ключ не указан или неверен.
 - `403` / `451` — провайдер блокирует регион. Используйте свой адрес через прокси или другой сервис.
 - Нет микрофона — браузеры разрешают запись только в защищённом контексте: HTTPS, `localhost` или `127.0.0.1`. Обычный HTTP по адресу в локальной сети не подойдёт.
-
-### ⚡ Быстрый старт
-
-1. Установите менеджер userscript: на телефоне — Firefox + [Tampermonkey](https://www.tampermonkey.net/); на компьютере — любой браузер, где ставятся [Tampermonkey](https://www.tampermonkey.net/) или [Violentmonkey](https://violentmonkey.github.io/).
-2. **[Установите OpenCodeVoice](https://raw.githubusercontent.com/slaid098/OpenCodeVoice/dist/opencode-voice-dictation.user.js)**.
-3. Откройте веб-интерфейс OpenCode 2 и нажмите шестерёнку рядом с микрофоном.
-4. Вставьте API-ключ Groq — бесплатный можно получить на [console.groq.com/keys](https://console.groq.com/keys) — или выберите свой адрес и укажите его URL и модель.
-5. Сохраните, нажмите микрофон, говорите и нажмите его снова.
-
-> На телефоне название модели в композере сокращается, чтобы рядом поместился выбор режима мышления. Иначе он уезжает за край экрана. На компьютере модель, выбор режима мышления и переключатель Plan/Build не меняются.
 
 ### 🛠 Разработка
 
