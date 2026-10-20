@@ -74,7 +74,7 @@ Open the panel with the gear button next to the microphone.
 4. Paste a Groq API key — a free one is available at [console.groq.com/keys](https://console.groq.com/keys) — or choose a custom endpoint and fill in its URL and model.
 5. Save, tap the microphone, speak, and tap it again.
 
-> On a phone the model name in the composer is shortened so the thinking-mode selector fits next to it. Without that, the selector is pushed off-screen. On a computer the native layout is left untouched.
+> On a phone the model name in the composer is shortened so the thinking-mode selector fits next to it. Without that, the selector is pushed off-screen. On a computer the model, thinking-mode, and Plan/Build controls are left as they are.
 
 ### 🛠 Development
 
@@ -148,7 +148,7 @@ npm run build
 4. Вставьте API-ключ Groq — бесплатный можно получить на [console.groq.com/keys](https://console.groq.com/keys) — или выберите свой адрес и укажите его URL и модель.
 5. Сохраните, нажмите микрофон, говорите и нажмите его снова.
 
-> На телефоне название модели в композере сокращается, чтобы рядом поместился выбор режима мышления. Иначе он уезжает за край экрана. На компьютере родной layout не меняется.
+> На телефоне название модели в композере сокращается, чтобы рядом поместился выбор режима мышления. Иначе он уезжает за край экрана. На компьютере модель, выбор режима мышления и переключатель Plan/Build не меняются.
 
 ### 🛠 Разработка
 
