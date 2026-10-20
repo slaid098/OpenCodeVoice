@@ -1,6 +1,10 @@
 export type InsertTarget = "composer" | "question";
 
-export type SttProviderId = "groq" | "openai" | "custom";
+export type Locale = "ru" | "en";
+
+export type LocalePreference = "auto" | Locale;
+
+export type SttProviderId = "groq" | "custom";
 
 export type LlmProviderId = "ollama-cloud" | "ollama-local" | "custom-openai";
 
@@ -8,14 +12,19 @@ export type DictationPhase = "idle" | "recording" | "stt" | "llm" | "insert" | "
 
 export type FailureStage = "stt" | "llm" | "insert" | "submit";
 
+export interface UiConfig {
+  language: LocalePreference;
+}
+
 export interface SttConfig {
   provider: SttProviderId;
-  endpoint: string;
   apiKey: string;
-  model: string;
   language: string;
   prompt: string;
   temperature: number;
+  groqModel: string;
+  customEndpoint: string;
+  customModel: string;
 }
 
 export interface LlmConfig {
@@ -44,6 +53,7 @@ export interface RetryConfig {
 
 export interface AppConfig {
   schemaVersion: 2;
+  ui: UiConfig;
   stt: SttConfig;
   llm: LlmConfig;
   behavior: BehaviorConfig;
@@ -92,7 +102,15 @@ export interface SelectorStatus {
   composerActions: boolean;
   composerActionsResolved: boolean;
   composerSubmit: boolean;
+  composerMic: boolean;
+  composerMicVisible: boolean;
   questionDock: boolean;
   questionInput: boolean;
+  questionInputCurrent: boolean;
+  questionInputLegacy: boolean;
+  questionHeaderActions: boolean;
+  questionCustomOption: boolean;
   questionFooter: boolean;
+  questionMic: boolean;
+  questionMicVisible: boolean;
 }

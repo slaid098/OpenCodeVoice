@@ -95,7 +95,46 @@ describe("listSttModels", () => {
     __setXmlhttpResponder(() => ({ status: 401, responseText: "nope" }));
     await expect(listSttModels(makeConfig())).rejects.toThrow(/Неверный API-ключ/);
     __setXmlhttpResponder(() => ({ status: 403, responseText: "nope" }));
-    await expect(listSttModels(makeConfig())).rejects.toThrow(/Неверный API-ключ/);
+    await expect(listSttModels(makeConfig())).rejects.toThrow(
+      /Доступ к списку моделей запрещён \(403\)/,
+    );
+  });
+
+  it("reports the region block from the OpenAI body", async () => {
+    __setXmlhttpResponder(() => ({
+      status: 403,
+      responseText: JSON.stringify({
+        error: { code: "unsupported_country_region_territory" },
+      }),
+    }));
+    const config = makeConfig((c) => {
+      c.stt.provider = "custom";
+      c.stt.customEndpoint = "https://api.openai.com/v1/audio/transcriptions";
+      c.stt.customModel = "whisper-1";
+    });
+    await expect(listSttModels(config)).rejects.toThrow(/блокирует запросы из вашего региона/);
+  });
+
+  it("reports the Groq region block from a plain Forbidden body", async () => {
+    __setXmlhttpResponder(() => ({
+      status: 403,
+      responseText: JSON.stringify({ error: { message: "Forbidden" } }),
+    }));
+    await expect(listSttModels(makeConfig())).rejects.toThrow(
+      /блокирует запросы из вашего региона/,
+    );
+  });
+
+  it("loads models from a custom STT endpoint", async () => {
+    __setXmlhttpResponder(() => json({ data: [{ id: "whisper-local" }] }));
+    await listSttModels(
+      makeConfig((c) => {
+        c.stt.provider = "custom";
+        c.stt.customEndpoint = "https://proxy.example.com/v1/audio/transcriptions";
+        c.stt.customModel = "whisper-local";
+      }),
+    );
+    expect(__getRequests()[0]?.url).toBe("https://proxy.example.com/v1/models");
   });
 
   it("maps network and other HTTP errors", async () => {

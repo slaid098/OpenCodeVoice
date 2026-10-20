@@ -52,40 +52,74 @@ function addComposer(options: { withActions?: boolean; withSubmit?: boolean } = 
   return { dock, editor, actions, submit };
 }
 
-function addQuestion(options: { withForm?: boolean; withFooter?: boolean } = {}): {
+interface QuestionFixture {
   dock: HTMLElement;
-  textarea: HTMLTextAreaElement;
+  /** The field the dictation should be inserted into. */
+  field: HTMLInputElement | HTMLTextAreaElement;
   form: HTMLFormElement | null;
   footer: HTMLElement | null;
-} {
+}
+
+function addQuestion(
+  options: { legacy?: boolean; withFooter?: boolean; withHeader?: boolean } = {},
+): QuestionFixture {
   const dock = document.createElement("div");
   dock.setAttribute("data-component", "session-question-dock");
-  const form = document.createElement("form");
-  form.setAttribute("data-slot", "question-option");
-  form.setAttribute("data-custom", "true");
-  const textarea = document.createElement("textarea");
-  textarea.setAttribute("data-slot", "question-custom-input");
+  const optionsList = document.createElement("div");
+  optionsList.setAttribute("data-slot", "question-options");
+
+  let field: HTMLInputElement | HTMLTextAreaElement;
+  let form: HTMLFormElement | null = null;
+
+  if (options.legacy) {
+    form = document.createElement("form");
+    form.setAttribute("data-slot", "question-option");
+    form.setAttribute("data-custom", "true");
+    const textarea = document.createElement("textarea");
+    textarea.setAttribute("data-slot", "question-custom-input");
+    form.appendChild(textarea);
+    optionsList.appendChild(form);
+    field = textarea;
+  } else {
+    const option = document.createElement("div");
+    option.setAttribute("data-slot", "question-option");
+    option.setAttribute("data-custom", "true");
+    const toggle = document.createElement("button");
+    toggle.setAttribute("data-slot", "question-custom-toggle");
+    const input = document.createElement("input");
+    input.setAttribute("data-slot", "text-input-v2-input");
+    option.append(toggle, input);
+    optionsList.appendChild(option);
+    field = input;
+  }
+  dock.appendChild(optionsList);
 
   let footer: HTMLElement | null = null;
   if (options.withFooter !== false) {
+    const footerWrap = document.createElement("div");
+    footerWrap.setAttribute("data-slot", "question-footer");
+    const dismiss = document.createElement("button");
+    dismiss.textContent = "Dismiss";
     footer = document.createElement("div");
     footer.setAttribute("data-slot", "question-footer-actions");
+    footerWrap.append(dismiss, footer);
+    dock.appendChild(footerWrap);
   }
 
-  if (options.withForm === false) {
-    dock.appendChild(textarea);
-    if (footer) {
-      dock.appendChild(footer);
-    }
-  } else {
-    form.appendChild(textarea);
-    if (footer) {
-      form.appendChild(footer);
-    }
-    dock.appendChild(form);
+  if (options.withHeader) {
+    const headerTop = document.createElement("div");
+    headerTop.setAttribute("data-slot", "question-header-top");
+    const header = document.createElement("div");
+    header.setAttribute("data-slot", "question-header-actions");
+    const collapse = document.createElement("button");
+    collapse.textContent = "Collapse";
+    header.appendChild(collapse);
+    headerTop.appendChild(header);
+    dock.insertBefore(headerTop, optionsList);
   }
+
   document.body.appendChild(dock);
-  return { dock, textarea, form: options.withForm === false ? null : form, footer };
+  return { dock, field, form, footer };
 }
 
 function stubExecCommand(impl: () => boolean): void {
@@ -113,21 +147,50 @@ describe("DOM detection", () => {
       composerActions: true,
       composerActionsResolved: true,
       composerSubmit: true,
+      composerMic: false,
+      composerMicVisible: false,
       questionDock: false,
       questionInput: false,
+      questionInputCurrent: false,
+      questionInputLegacy: false,
+      questionHeaderActions: false,
+      questionCustomOption: false,
       questionFooter: false,
+      questionMic: false,
+      questionMicVisible: false,
     });
     expect(findComposerEditor()).toBe(editor);
     expect(findComposerActions()).not.toBeNull();
     expect(findComposerDock()).not.toBeNull();
   });
 
-  it("detects question prompts", () => {
+  it("detects question prompts in the current DOM", () => {
     expect(isQuestionPromptOpen()).toBe(false);
-    addQuestion();
+    const { field, footer } = addQuestion();
     expect(isQuestionPromptOpen()).toBe(true);
-    expect(findQuestionInput()).not.toBeNull();
-    expect(findQuestionFooter()).not.toBeNull();
+    expect(findQuestionInput()).toBe(field);
+    expect(findQuestionFooter()).toBe(footer);
+    const status = getSelectorStatus();
+    expect(status).toMatchObject({
+      questionDock: true,
+      questionInput: true,
+      questionInputCurrent: true,
+      questionInputLegacy: false,
+      questionCustomOption: true,
+      questionFooter: true,
+    });
+  });
+
+  it("detects legacy question prompts", () => {
+    const { field } = addQuestion({ legacy: true, withFooter: false });
+    expect(isQuestionPromptOpen()).toBe(true);
+    expect(findQuestionInput()).toBe(field);
+    expect(getSelectorStatus()).toMatchObject({
+      questionInput: true,
+      questionInputCurrent: false,
+      questionInputLegacy: true,
+      questionFooter: false,
+    });
   });
 
   it("finds actions through the composer form when the dock is missing", () => {
@@ -242,10 +305,10 @@ describe("DOM detection", () => {
 
   it("resolves the preferred target", () => {
     expect(resolveTarget("composer")).toBe("composer");
-    const { textarea } = addQuestion();
+    const { field } = addQuestion();
     expect(resolveTarget("question")).toBe("question");
     expect(resolveTarget("composer")).toBe("question");
-    textarea.remove();
+    field.remove();
     const { editor } = addComposer();
     expect(resolveTarget("question")).toBe("composer");
     expect(resolveTarget("composer")).toBe("composer");
@@ -380,29 +443,45 @@ describe("composer submission", () => {
 });
 
 describe("question insertion", () => {
-  it("inserts at the caret and fires input", () => {
-    const { textarea } = addQuestion();
-    textarea.value = "abc";
-    textarea.selectionStart = 1;
-    textarea.selectionEnd = 1;
+  it("inserts at the caret of the current text input and fires input", () => {
+    const { field } = addQuestion();
+    field.value = "abc";
+    field.setSelectionRange(1, 1);
     const inputs: string[] = [];
-    textarea.addEventListener("input", () => inputs.push(textarea.value));
+    field.addEventListener("input", () => inputs.push(field.value));
 
     expect(insertText("X", "question")).toBe(true);
-    expect(textarea.value).toBe("aXbc");
-    expect(textarea.selectionStart).toBe(2);
+    expect(field.value).toBe("aXbc");
+    expect(field.selectionStart).toBe(2);
     expect(inputs).toEqual(["aXbc"]);
   });
 
-  it("replaces the whole textarea", () => {
-    const { textarea } = addQuestion();
-    textarea.value = "old";
+  it("replaces the whole current text input", () => {
+    const { field } = addQuestion();
+    field.value = "old";
     expect(replaceText("new", "question")).toBe(true);
-    expect(textarea.value).toBe("new");
-    expect(textarea.selectionStart).toBe(3);
+    expect(field.value).toBe("new");
+    expect(field.selectionStart).toBe(3);
   });
 
-  it("returns false without a question textarea", () => {
+  it("inserts into the legacy textarea", () => {
+    const { field } = addQuestion({ legacy: true });
+    field.value = "abc";
+    field.setSelectionRange(1, 1);
+    expect(insertText("X", "question")).toBe(true);
+    expect(field.value).toBe("aXbc");
+    expect(field.selectionStart).toBe(2);
+  });
+
+  it("replaces the whole legacy textarea", () => {
+    const { field } = addQuestion({ legacy: true });
+    field.value = "old";
+    expect(replaceText("new", "question")).toBe(true);
+    expect(field.value).toBe("new");
+    expect(field.selectionStart).toBe(3);
+  });
+
+  it("returns false without a question field", () => {
     expect(insertText("x", "question")).toBe(false);
     expect(replaceText("x", "question")).toBe(false);
     expect(submitQuestion()).toBe(false);
@@ -410,26 +489,54 @@ describe("question insertion", () => {
 });
 
 describe("question submission", () => {
-  it("treats a prevented Enter as handled", () => {
-    const { textarea } = addQuestion();
-    textarea.addEventListener("keydown", (event) => event.preventDefault());
+  it("clicks the last enabled footer button in the current DOM", () => {
+    const { footer } = addQuestion();
+    const back = document.createElement("button");
+    back.textContent = "Back";
+    const next = document.createElement("button");
+    next.textContent = "Next";
+    footer?.append(back, next);
+    const backClick = vi.fn();
+    const nextClick = vi.fn();
+    back.addEventListener("click", backClick);
+    next.addEventListener("click", nextClick);
+    expect(submitPrompt("question")).toBe(true);
+    expect(backClick).not.toHaveBeenCalled();
+    expect(nextClick).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignores our dictation button when picking the footer action", () => {
+    const { footer } = addQuestion();
+    const next = document.createElement("button");
+    next.textContent = "Next";
+    const mic = document.createElement("button");
+    mic.setAttribute("data-ocvd", "question-mic");
+    footer?.append(next, mic);
+    const nextClick = vi.fn();
+    next.addEventListener("click", nextClick);
+    expect(submitQuestion()).toBe(true);
+    expect(nextClick).toHaveBeenCalledTimes(1);
+  });
+
+  it("treats a prevented Enter as handled in the legacy DOM", () => {
+    const { field } = addQuestion({ legacy: true, withFooter: false });
+    field.addEventListener("keydown", (event) => event.preventDefault());
     expect(submitQuestion()).toBe(true);
   });
 
-  it("submits the form with requestSubmit", () => {
-    const { textarea, form } = addQuestion();
+  it("submits the legacy form with requestSubmit", () => {
+    const { field, form } = addQuestion({ legacy: true, withFooter: false });
     const requestSubmit = vi.fn();
     if (form) {
       form.requestSubmit = requestSubmit;
     }
     expect(submitPrompt("question")).toBe(true);
     expect(requestSubmit).toHaveBeenCalledTimes(1);
-    expect(textarea).toBe(document.activeElement);
+    expect(field).toBe(document.activeElement);
   });
 
-  it("clicks a footer button when no form is available", () => {
-    const { textarea } = addQuestion({ withForm: false, withFooter: true });
-    const footer = findQuestionFooter();
+  it("clicks a footer button when there is no form", () => {
+    const { footer } = addQuestion();
     const button = document.createElement("button");
     button.textContent = "Ответить";
     footer?.appendChild(button);
@@ -437,29 +544,30 @@ describe("question submission", () => {
     button.addEventListener("click", click);
     expect(submitQuestion()).toBe(true);
     expect(click).toHaveBeenCalledTimes(1);
-    expect(textarea).toBe(document.activeElement);
   });
 
-  it("prefers a submit button in the footer", () => {
-    addQuestion({ withForm: false });
-    const footer = findQuestionFooter();
+  it("prefers the last footer button", () => {
+    const { footer } = addQuestion();
+    const first = document.createElement("button");
     const submit = document.createElement("button");
     submit.type = "submit";
-    footer?.appendChild(submit);
+    footer?.append(first, submit);
+    const firstClick = vi.fn();
     const click = vi.fn();
+    first.addEventListener("click", firstClick);
     submit.addEventListener("click", click);
     expect(submitQuestion()).toBe(true);
+    expect(firstClick).not.toHaveBeenCalled();
     expect(click).toHaveBeenCalled();
   });
 
   it("returns false when the footer has no usable button", () => {
-    addQuestion({ withForm: false });
+    addQuestion();
     expect(submitQuestion()).toBe(false);
   });
 
   it("ignores disabled buttons", () => {
-    addQuestion({ withForm: false });
-    const footer = findQuestionFooter();
+    const { footer } = addQuestion();
     const button = document.createElement("button");
     button.disabled = true;
     footer?.appendChild(button);

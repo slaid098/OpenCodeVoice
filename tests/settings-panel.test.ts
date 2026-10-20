@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { DEFAULT_CLEANUP_PROMPT, createDefaultConfig } from "../src/config.js";
+import { DEFAULT_CLEANUP_PROMPT_RU, createDefaultConfig } from "../src/config.js";
 import { type SettingsPanel, createSettingsPanel } from "../src/settings-panel.js";
 import { clearFailures, saveFailure } from "../src/storage.js";
 import type { AppConfig, FailedDictation } from "../src/types.js";
@@ -18,6 +18,7 @@ const panels: SettingsPanel[] = [];
 
 function validConfig(overrides: (config: AppConfig) => void = () => {}): AppConfig {
   const config = createDefaultConfig();
+  config.ui.language = "ru";
   config.stt.apiKey = "stt-key";
   config.llm.apiKey = "llm-key";
   config.retry.maxAttempts = 1;
@@ -212,7 +213,7 @@ describe("opening and closing", () => {
     expect(sheet.getAttribute("role")).toBe("dialog");
     expect(sheet.getAttribute("aria-modal")).toBe("true");
     expect(root().querySelector(".title")?.textContent).toBe("Голосовой ввод");
-    expect(root().querySelector(".subtitle")?.textContent).toBe("OpenCode 2 · v2.0.0");
+    expect(root().querySelector(".subtitle")?.textContent).toBe("OpenCode 2 · v0.9.0");
     expect(root().querySelector('.tab[data-tab="stt"]')?.getAttribute("aria-selected")).toBe(
       "true",
     );
@@ -284,7 +285,7 @@ describe("tabs and draft", () => {
     expect(root().querySelector('.tab[data-tab="llm"]')?.getAttribute("aria-selected")).toBe(
       "true",
     );
-    expect(textarea("Системная инструкция").value).toBe(DEFAULT_CLEANUP_PROMPT);
+    expect(textarea("Системная инструкция").value).toBe(DEFAULT_CLEANUP_PROMPT_RU);
 
     openTab("behavior");
     expect(checkbox("Отправлять сообщения в composer").checked).toBe(true);
@@ -314,19 +315,35 @@ describe("tabs and draft", () => {
 });
 
 describe("STT tab", () => {
-  it("applies provider presets and keeps custom values", () => {
+  it("shows only the provider choice and the built-in Groq endpoint", () => {
     openPanel();
-    setValue(field("Провайдер"), "openai");
-    expect(input("Endpoint").value).toBe("https://api.openai.com/v1/audio/transcriptions");
-    expect(input("Модель").value).toBe("whisper-1");
+    const provider = field("Провайдер");
+    expect(provider).toBeInstanceOf(HTMLSelectElement);
+    const labels = [...(provider as HTMLSelectElement).options].map((option) => option.textContent);
+    expect(labels).toEqual(["Whisper (Groq)", "Custom URL"]);
+    expect(root().textContent).toContain(
+      "Встроенный Whisper (Groq): https://api.groq.com/openai/v1/audio/transcriptions",
+    );
+    expect(() => input("Endpoint")).toThrow(/not found/);
+    expect(input("Модель").value).toBe("whisper-large-v3-turbo");
+  });
 
+  it("switches to Custom URL and keeps the custom values across presets", () => {
+    openPanel();
     setValue(field("Провайдер"), "custom");
-    expect(input("Endpoint").value).toBe("https://api.openai.com/v1/audio/transcriptions");
-    expect(input("Модель").value).toBe("whisper-1");
+    expect(input("Endpoint").value).toBe("");
+    const endpoint = input("Endpoint");
+    const model = input("Модель");
+    setValue(endpoint, "https://proxy.example.com/transcribe");
+    setValue(model, "my-model");
 
     setValue(field("Провайдер"), "groq");
-    expect(input("Endpoint").value).toBe("https://api.groq.com/openai/v1/audio/transcriptions");
     expect(input("Модель").value).toBe("whisper-large-v3-turbo");
+    expect(() => input("Endpoint")).toThrow(/not found/);
+
+    setValue(field("Провайдер"), "custom");
+    expect(input("Endpoint").value).toBe("https://proxy.example.com/transcribe");
+    expect(input("Модель").value).toBe("my-model");
   });
 
   it("toggles API key visibility", () => {
@@ -342,6 +359,7 @@ describe("STT tab", () => {
   it("trims values, saves and closes", () => {
     vi.useFakeTimers();
     const { panel, deps } = openPanel();
+    setValue(field("Провайдер"), "custom");
     setValue(input("Endpoint"), "  https://proxy.example.com/transcribe  ");
     setValue(input("API-ключ"), "  secret  ");
     setValue(input("Модель"), "  my-model  ");
@@ -353,9 +371,10 @@ describe("STT tab", () => {
     expect(deps.saveConfig).toHaveBeenCalledTimes(1);
     expect(deps.onSaved).toHaveBeenCalledTimes(1);
     const saved = deps.saveConfig.mock.calls[0]?.[0] as AppConfig;
-    expect(saved.stt.endpoint).toBe("https://proxy.example.com/transcribe");
+    expect(saved.stt.provider).toBe("custom");
+    expect(saved.stt.customEndpoint).toBe("https://proxy.example.com/transcribe");
     expect(saved.stt.apiKey).toBe("secret");
-    expect(saved.stt.model).toBe("my-model");
+    expect(saved.stt.customModel).toBe("my-model");
     expect(saved.stt.language).toBe("ru");
     expect(saved.stt.temperature).toBe(0.5);
 
@@ -363,15 +382,35 @@ describe("STT tab", () => {
     expect(panel.isOpen()).toBe(false);
   });
 
+  it("trims and saves the Groq model", () => {
+    const { deps } = openPanel();
+    setValue(input("Модель"), "  whisper-large-v3  ");
+    setValue(input("API-ключ"), "  secret  ");
+    clickButton("Сохранить");
+    const saved = deps.saveConfig.mock.calls[0]?.[0] as AppConfig;
+    expect(saved.stt.provider).toBe("groq");
+    expect(saved.stt.groqModel).toBe("whisper-large-v3");
+    expect(saved.stt.apiKey).toBe("secret");
+  });
+
   it("shows validation errors and keeps the panel open", () => {
     const { panel, deps } = openPanel();
+    setValue(field("Провайдер"), "custom");
     setValue(input("Endpoint"), "not a url");
-    setValue(input("API-ключ"), "");
+    setValue(input("Модель"), "");
     clickButton("Сохранить");
     expect(deps.saveConfig).not.toHaveBeenCalled();
     expect(footerStatus()).toContain("STT endpoint");
-    expect(footerStatus()).toContain("Укажите API-ключ STT");
+    expect(footerStatus()).toContain("Укажите модель STT");
     expect(panel.isOpen()).toBe(true);
+  });
+
+  it("keeps a blank Groq key as a validation error", () => {
+    const { deps } = openPanel();
+    setValue(input("API-ключ"), "");
+    clickButton("Сохранить");
+    expect(deps.saveConfig).not.toHaveBeenCalled();
+    expect(footerStatus()).toContain("Укажите API-ключ STT");
   });
 
   it("reports save failures", () => {
@@ -398,7 +437,7 @@ describe("STT tab", () => {
     openPanel(
       makeDeps(
         validConfig((config) => {
-          config.stt.model = "";
+          config.stt.groqModel = "";
         }),
       ),
     );
@@ -492,7 +531,7 @@ describe("LLM tab and cleanup prompt", () => {
     const { deps } = openPanel();
     openTab("llm");
     const prompt = textarea("Системная инструкция");
-    expect(prompt.value).toBe(DEFAULT_CLEANUP_PROMPT);
+    expect(prompt.value).toBe(DEFAULT_CLEANUP_PROMPT_RU);
     setValue(prompt, "Мой промпт");
     expect(root().textContent).toContain("Символов: 10");
     clickButton("Сохранить");
@@ -509,7 +548,7 @@ describe("LLM tab and cleanup prompt", () => {
       ),
     );
     openTab("llm");
-    expect(textarea("Системная инструкция").value).toBe(DEFAULT_CLEANUP_PROMPT);
+    expect(textarea("Системная инструкция").value).toBe(DEFAULT_CLEANUP_PROMPT_RU);
   });
 
   it("resets the prompt after a second click", () => {
@@ -526,7 +565,7 @@ describe("LLM tab and cleanup prompt", () => {
     expect(prompt.value).toBe("Мой промпт");
     expect(button("Нажмите ещё раз для сброса")).not.toBeNull();
     clickButton("Нажмите ещё раз для сброса");
-    expect(prompt.value).toBe(DEFAULT_CLEANUP_PROMPT);
+    expect(prompt.value).toBe(DEFAULT_CLEANUP_PROMPT_RU);
     expect(footerStatus()).toContain("Промпт сброшен");
   });
 
@@ -743,6 +782,43 @@ describe("behavior tab", () => {
     expect(deps.saveConfig).not.toHaveBeenCalled();
     expect(footerStatus()).toContain("Количество попыток");
   });
+
+  it("lists the interface language options", () => {
+    openPanel();
+    openTab("behavior");
+    const language = field("Язык интерфейса");
+    expect(language).toBeInstanceOf(HTMLSelectElement);
+    const select = language as HTMLSelectElement;
+    expect(select.value).toBe("ru");
+    expect([...select.options].map((option) => option.textContent)).toEqual([
+      "Авто (по браузеру)",
+      "Русский",
+      "English",
+    ]);
+  });
+
+  it("applies the selected language after saving", () => {
+    const { deps } = openPanel();
+    openTab("behavior");
+    setValue(field("Язык интерфейса"), "en");
+    clickButton("Сохранить");
+    const saved = deps.saveConfig.mock.calls[0]?.[0] as AppConfig;
+    expect(saved.ui.language).toBe("en");
+    expect(footerStatus()).toBe("Saved.");
+  });
+
+  it("renders English labels after saving the language", () => {
+    const deps = makeDeps();
+    const { panel } = openPanel(deps);
+    openTab("behavior");
+    setValue(field("Язык интерфейса"), "en");
+    clickButton("Сохранить");
+    panel.close();
+
+    openPanel(makeDeps(deps.getConfig()));
+    expect(root().querySelector(".title")?.textContent).toBe("Voice input");
+    expect(root().querySelector('.tab[data-tab="behavior"]')?.textContent).toBe("Behavior");
+  });
 });
 
 describe("diagnostics tab", () => {
@@ -752,9 +828,13 @@ describe("diagnostics tab", () => {
     await vi.waitFor(() => {
       expect(root().textContent).toContain("Сохранённых ошибок нет.");
     });
-    expect(root().textContent).toContain("2.0.0");
+    expect(root().textContent).toContain("0.9.0");
     expect(root().textContent).toContain("не обнаружена");
     expect(root().textContent).toContain("Composer dock");
+    expect(root().textContent).toContain("Микрофон в композере");
+    expect(root().textContent).toContain("Микрофон в композере виден");
+    expect(root().textContent).toContain("Поле вопроса (актуальное)");
+    expect(root().textContent).toContain("Поле вопроса (legacy)");
     expect(root().textContent).toContain("✗ нет");
 
     addComposer();

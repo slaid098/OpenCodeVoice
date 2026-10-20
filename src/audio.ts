@@ -1,3 +1,5 @@
+import { t } from "./i18n.js";
+
 export interface RecordedAudio {
   blob: Blob;
   mimeType: string;
@@ -59,16 +61,16 @@ export function createAudioRecorder(): AudioRecorder {
   return {
     async start(): Promise<void> {
       if (recording) {
-        throw new AudioError("Запись уже идёт.");
+        throw new AudioError(t("audio.alreadyRecording"));
       }
       if (typeof window !== "undefined" && window.isSecureContext === false) {
-        throw new AudioError("Микрофон доступен только по HTTPS или на localhost.");
+        throw new AudioError(t("audio.secureContext"));
       }
       if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
-        throw new AudioError("Браузер не поддерживает запись с микрофона.");
+        throw new AudioError(t("audio.noRecordingSupport"));
       }
       if (typeof MediaRecorder === "undefined") {
-        throw new AudioError("Браузер не поддерживает MediaRecorder.");
+        throw new AudioError(t("audio.noMediaRecorder"));
       }
 
       try {
@@ -104,7 +106,7 @@ export function createAudioRecorder(): AudioRecorder {
         }
       };
       mediaRecorder.onerror = () => {
-        recordingError = new AudioError("Ошибка записи с микрофона.");
+        recordingError = new AudioError(t("audio.recordingError"));
       };
 
       startedAt = Date.now();
@@ -117,7 +119,7 @@ export function createAudioRecorder(): AudioRecorder {
         return stopPromise;
       }
       if (!mediaRecorder || !recording) {
-        return Promise.reject(new AudioError("Запись не начата."));
+        return Promise.reject(new AudioError(t("audio.notStarted")));
       }
 
       const recorder = mediaRecorder;
@@ -137,12 +139,12 @@ export function createAudioRecorder(): AudioRecorder {
           if (discard) {
             chunks = [];
             stopPromise = null;
-            reject(new AudioError("Запись отменена."));
+            reject(new AudioError(t("audio.cancelled")));
             return;
           }
           if (blob.size === 0) {
             stopPromise = null;
-            reject(recordingError ?? new AudioError("Запись пустая. Попробуйте ещё раз."));
+            reject(recordingError ?? new AudioError(t("audio.empty")));
             return;
           }
           resolve({ blob, mimeType: capturedMime, durationMs });
@@ -155,7 +157,7 @@ export function createAudioRecorder(): AudioRecorder {
 
         recorder.onstop = finish;
         recorder.onerror = () => {
-          recordingError = new AudioError("Ошибка записи с микрофона.");
+          recordingError = new AudioError(t("audio.recordingError"));
           finish();
         };
 
@@ -200,20 +202,18 @@ export function mapGetUserMediaError(error: unknown): AudioError {
     switch (error.name) {
       case "NotAllowedError":
       case "SecurityError":
-        return new AudioError(
-          "Доступ к микрофону запрещён. Разрешите микрофон в настройках браузера.",
-        );
+        return new AudioError(t("audio.denied"));
       case "NotFoundError":
       case "DevicesNotFoundError":
-        return new AudioError("Микрофон не найден.");
+        return new AudioError(t("audio.notFound"));
       case "NotReadableError":
       case "TrackStartError":
-        return new AudioError("Микрофон занят другим приложением.");
+        return new AudioError(t("audio.busy"));
       case "OverconstrainedError":
-        return new AudioError("Микрофон не поддерживает нужные параметры записи.");
+        return new AudioError(t("audio.constraints"));
       default:
-        return new AudioError(`Не удалось получить доступ к микрофону: ${error.message}`);
+        return new AudioError(t("audio.accessFailed", { message: error.message }));
     }
   }
-  return new AudioError("Не удалось получить доступ к микрофону.");
+  return new AudioError(t("audio.accessFailedUnknown"));
 }

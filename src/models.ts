@@ -1,6 +1,8 @@
+import { resolveSttEndpoint } from "./config.js";
 import { HttpError, type RetryPolicy, httpRequest } from "./http.js";
+import { t } from "./i18n.js";
 import { joinOpenAiEndpoint } from "./llm.js";
-import { retryPolicy } from "./transcribe.js";
+import { isSttRegionBlock, retryPolicy } from "./transcribe.js";
 import type { AppConfig, ModelInfo } from "./types.js";
 
 export class ModelsError extends Error {
@@ -11,19 +13,19 @@ export class ModelsError extends Error {
 }
 
 export class ModelsUnsupportedError extends ModelsError {
-  constructor(message = "Провайдер не отдаёт список моделей. Введите модель вручную.") {
+  constructor(message = t("models.unsupported")) {
     super(message);
     this.name = "ModelsUnsupportedError";
   }
 }
 
 export async function listSttModels(config: AppConfig, signal?: AbortSignal): Promise<ModelInfo[]> {
-  const url = sttModelsUrl(config.stt.endpoint);
+  const url = sttModelsUrl(resolveSttEndpoint(config.stt));
   const headers = authHeaders(config.stt.apiKey);
   const payload = await fetchJson(url, headers, retryPolicy(config), signal);
   const ids = extractOpenAiIds(payload);
   if (ids.length === 0) {
-    throw new ModelsError("Провайдер вернул пустой список моделей.");
+    throw new ModelsError(t("models.empty"));
   }
   return sortSttModels(ids);
 }
@@ -39,7 +41,7 @@ export async function listLlmModels(config: AppConfig, signal?: AbortSignal): Pr
     );
     const ids = extractOpenAiIds(payload);
     if (ids.length === 0) {
-      throw new ModelsError("Провайдер вернул пустой список моделей.");
+      throw new ModelsError(t("models.empty"));
     }
     return ids.map(toModelInfo);
   }
@@ -49,7 +51,7 @@ export async function listLlmModels(config: AppConfig, signal?: AbortSignal): Pr
   const payload = await fetchJson(url, authHeaders(config.llm.apiKey), retryPolicy(config), signal);
   const names = extractOllamaNames(payload);
   if (names.length === 0) {
-    throw new ModelsError("Ollama вернула пустой список моделей.");
+    throw new ModelsError(t("models.ollamaEmpty"));
   }
   return names.map(toModelInfo);
 }
@@ -135,20 +137,27 @@ async function fetchJson(
     try {
       return JSON.parse(response.text);
     } catch {
-      throw new ModelsError("Провайдер вернул некорректный JSON.");
+      throw new ModelsError(t("models.invalidJson"));
     }
   } catch (error) {
     if (error instanceof HttpError) {
+      const body = error.body ?? "";
       if (error.status === 404 || error.status === 405) {
         throw new ModelsUnsupportedError();
       }
-      if (error.status === 401 || error.status === 403) {
-        throw new ModelsError("Неверный API-ключ или нет доступа к списку моделей.");
+      if (error.status === 401) {
+        throw new ModelsError(t("models.invalidKey"));
+      }
+      if (isSttRegionBlock(error.status, body, url)) {
+        throw new ModelsError(t("models.regionBlocked"));
+      }
+      if (error.status === 403) {
+        throw new ModelsError(t("models.forbidden"));
       }
       if (error.status === 0) {
-        throw new ModelsError(`Не удалось связаться с провайдером: ${error.message}`);
+        throw new ModelsError(t("models.network", { message: error.message }));
       }
-      throw new ModelsError(`Ошибка загрузки моделей (${error.status}).`);
+      throw new ModelsError(t("models.httpError", { status: error.status }));
     }
     throw error;
   }

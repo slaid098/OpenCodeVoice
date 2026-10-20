@@ -1,11 +1,14 @@
 import { formatTime } from "./audio.js";
+import { type MessageKey, getLocale, t } from "./i18n.js";
 import {
   SELECTORS,
   findComposerActions,
   findComposerDock,
   findComposerEditor,
   findComposerForm,
+  findQuestionCustomOption,
   findQuestionFooter,
+  findQuestionHeaderActions,
   findQuestionInput,
 } from "./insert.js";
 import type { RecoveryActions, ToastOptions } from "./pipeline.js";
@@ -31,26 +34,26 @@ export interface Ui {
 const SVG_NS = "http://www.w3.org/2000/svg";
 const STYLE_ID = "ocvd-page-style";
 
-const PHASE_LABEL: Record<Exclude<DictationPhase, "idle">, string> = {
-  recording: "Запись",
-  stt: "Распознаю речь…",
-  llm: "Чищу текст…",
-  insert: "Вставляю текст…",
-  submit: "Отправляю…",
+const PHASE_KEY: Record<Exclude<DictationPhase, "idle">, MessageKey> = {
+  recording: "ui.phase.recording",
+  stt: "ui.phase.stt",
+  llm: "ui.phase.llm",
+  insert: "ui.phase.insert",
+  submit: "ui.phase.submit",
 };
 
-const STAGE_LABEL: Record<FailedDictation["stage"], string> = {
-  stt: "Распознавание",
-  llm: "Очистка",
-  insert: "Вставка",
-  submit: "Отправка",
+const STAGE_KEY: Record<FailedDictation["stage"], MessageKey> = {
+  stt: "ui.stage.stt",
+  llm: "ui.stage.llm",
+  insert: "ui.stage.insert",
+  submit: "ui.stage.submit",
 };
 
-const RETRY_LABEL: Record<FailedDictation["stage"], string> = {
-  stt: "Повторить STT",
-  llm: "Повторить очистку",
-  insert: "Повторить вставку",
-  submit: "Отправить снова",
+const RETRY_KEY: Record<FailedDictation["stage"], MessageKey> = {
+  stt: "ui.retry.stt",
+  llm: "ui.retry.llm",
+  insert: "ui.retry.insert",
+  submit: "ui.retry.submit",
 };
 
 export function createUi(options: UiOptions): Ui {
@@ -59,6 +62,7 @@ export function createUi(options: UiOptions): Ui {
   let started = false;
   let observer: MutationObserver | null = null;
   let scheduled: ReturnType<typeof setTimeout> | null = null;
+  let heartbeat: ReturnType<typeof setInterval> | null = null;
   let toastTimer: ReturnType<typeof setTimeout> | null = null;
 
   let host: HTMLElement | null = null;
@@ -157,6 +161,33 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
 }
 @media (pointer: coarse) {
   button.ocvd-btn { width: 48px; height: 48px; min-width: 48px; min-height: 48px; }
+}
+@media (max-width: 767px) {
+  form[data-component="composer"] [data-slot="composer-controls"] > div {
+    width: 100%;
+    min-width: 0;
+  }
+  form[data-component="composer"] [data-slot="composer-controls"] > div > * {
+    flex: 0 0 auto;
+  }
+  form[data-component="composer"] [data-slot="composer-controls"] > div > *:has([data-action="composer-model"]) {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+  form[data-component="composer"] [data-slot="composer-controls"] > div > [data-action="composer-model"] {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+  form[data-component="composer"] [data-slot="composer-controls"] [data-action="composer-model"] {
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+  }
+  form[data-component="composer"] [data-slot="composer-controls"] [data-action="composer-model"] .truncate {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 }
 @keyframes ocvd-spin-page { to { transform: rotate(360deg); } }
 `;
@@ -343,7 +374,7 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
     const cancelButton = document.createElement("button");
     cancelButton.type = "button";
     cancelButton.className = "ocvd-cancel";
-    cancelButton.textContent = "Отмена";
+    cancelButton.textContent = t("common.cancel");
     cancelButton.addEventListener("click", () => options.onCancel());
     statusEl.append(statusIconEl, statusTextEl, cancelButton);
 
@@ -430,24 +461,30 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
 
   const micLabel = (): string => {
     if (phase === "recording") {
-      return "Остановить запись";
+      return t("ui.mic.stop");
     }
     if (phase === "idle") {
-      return "Начать голосовую диктовку";
+      return t("ui.mic.start");
     }
-    return "Идёт обработка записи";
+    return t("ui.mic.busy");
   };
 
   const renderMicButton = (button: HTMLButtonElement): void => {
-    if (button.dataset.ocvdState === phase && button.firstChild) {
+    const label = micLabel();
+    if (
+      button.dataset.ocvdState === phase &&
+      button.dataset.ocvdLabel === label &&
+      button.firstChild
+    ) {
       return;
     }
     button.replaceChildren();
     button.disabled = phase !== "idle" && phase !== "recording";
     button.dataset.ocvdState = phase;
+    button.dataset.ocvdLabel = label;
     button.classList.toggle("ocvd-btn--recording", phase === "recording");
-    button.setAttribute("aria-label", micLabel());
-    button.setAttribute("title", micLabel());
+    button.setAttribute("aria-label", label);
+    button.setAttribute("title", label);
     if (phase === "recording") {
       button.appendChild(stopIcon());
     } else if (phase === "idle") {
@@ -479,10 +516,10 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
       const dot = document.createElement("span");
       dot.className = "ocvd-dot";
       statusIconEl.appendChild(dot);
-      statusTextEl.textContent = `${PHASE_LABEL.recording} ${formatTime(elapsedSeconds)}`;
+      statusTextEl.textContent = `${t(PHASE_KEY.recording)} ${formatTime(elapsedSeconds)}`;
     } else {
       statusIconEl.appendChild(spinner());
-      statusTextEl.textContent = PHASE_LABEL[phase];
+      statusTextEl.textContent = t(PHASE_KEY[phase]);
     }
   };
 
@@ -527,7 +564,7 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
     const close = document.createElement("button");
     close.type = "button";
     close.className = "ocvd-close";
-    close.setAttribute("aria-label", "Закрыть уведомление");
+    close.setAttribute("aria-label", t("ui.toast.close"));
     close.textContent = "×";
     close.addEventListener("click", hideToast);
     toastEl.appendChild(close);
@@ -554,18 +591,21 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
     const title = document.createElement("div");
     title.className = "ocvd-recovery-title";
     const titleText = document.createElement("span");
-    titleText.textContent = `Незавершённая диктовка · ${STAGE_LABEL[record.stage]}`;
+    titleText.textContent = t("ui.recovery.title", { stage: t(STAGE_KEY[record.stage]) });
     const time = document.createElement("span");
     time.className = "ocvd-recovery-time";
-    time.textContent = new Date(record.createdAt).toLocaleTimeString("ru-RU", {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    time.textContent = new Date(record.createdAt).toLocaleTimeString(
+      getLocale() === "ru" ? "ru-RU" : "en-US",
+      {
+        hour: "2-digit",
+        minute: "2-digit",
+      },
+    );
     title.append(titleText, time);
 
     const message = document.createElement("p");
     message.className = "ocvd-recovery-text";
-    message.textContent = record.error || "Последняя операция не завершилась.";
+    message.textContent = record.error || t("ui.recovery.fallbackError");
     if (message.textContent.length > 220) {
       message.textContent = `${message.textContent.slice(0, 219)}…`;
     }
@@ -591,15 +631,15 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
       row.appendChild(button);
     };
 
-    addButton(RETRY_LABEL[record.stage], actions.onRetry, "primary");
+    addButton(t(RETRY_KEY[record.stage]), actions.onRetry, "primary");
     if (actions.onSubmitRaw) {
-      addButton("Отправить как есть", actions.onSubmitRaw);
+      addButton(t("ui.recovery.submitRaw"), actions.onSubmitRaw);
     }
     if (actions.onInsertRaw) {
-      addButton("Вставить сырой текст", actions.onInsertRaw);
+      addButton(t("ui.recovery.insertRaw"), actions.onInsertRaw);
     }
-    addButton("Настройки", actions.onSettings);
-    addButton("Удалить", actions.onDelete, "danger");
+    addButton(t("common.settings"), actions.onSettings);
+    addButton(t("ui.recovery.delete"), actions.onDelete, "danger");
 
     recoveryEl.append(title, message, row);
   };
@@ -634,8 +674,8 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
     button.type = "button";
     button.className = "ocvd-btn ocvd-gear";
     button.dataset.ocvd = "composer-settings";
-    button.setAttribute("aria-label", "Настройки голосового ввода");
-    button.setAttribute("title", "Настройки голосового ввода");
+    button.setAttribute("aria-label", t("ui.settingsLabel"));
+    button.setAttribute("title", t("ui.settingsLabel"));
     button.appendChild(gearIcon());
     button.addEventListener("pointerdown", (event) => {
       event.stopPropagation();
@@ -651,6 +691,9 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
   const removeNode = (node: Element | null): void => {
     node?.remove();
   };
+
+  const isVisibleNode = (node: Element | null): boolean =>
+    node instanceof HTMLElement && node.getClientRects().length > 0;
 
   const dedupe = (container: Element, selector: string): HTMLButtonElement | null => {
     const nodes = [...container.querySelectorAll<HTMLButtonElement>(selector)];
@@ -671,6 +714,9 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
     const fallback = document.querySelector<HTMLElement>('[data-ocvd="composer-fallback"]');
 
     if (actions) {
+      if (isVisibleNode(existingMic) && !isVisibleNode(actions)) {
+        return;
+      }
       removeNode(fallback);
       if (existingMic && !actions.contains(existingMic)) {
         existingMic.remove();
@@ -735,45 +781,93 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
     }
   };
 
+  const placeBesideField = (container: HTMLElement, wrapper: HTMLElement): void => {
+    const field =
+      container.querySelector<HTMLInputElement | HTMLTextAreaElement>(SELECTORS.questionInput) ??
+      null;
+    if (field) {
+      let anchor: Node | null = field;
+      while (anchor && anchor.parentElement !== container) {
+        anchor = anchor.parentElement;
+      }
+      const anchorElement = anchor instanceof Element ? anchor : null;
+      if (wrapper.parentElement !== container || wrapper.previousElementSibling !== anchorElement) {
+        container.insertBefore(wrapper, anchor?.nextSibling ?? null);
+      }
+      return;
+    }
+    if (wrapper.parentElement !== container) {
+      container.appendChild(wrapper);
+    }
+  };
+
   const injectQuestion = (): void => {
-    const footer = findQuestionFooter();
     const existingMic = document.querySelector<HTMLButtonElement>(
       'button[data-ocvd="question-mic"]',
     );
     const fallback = document.querySelector<HTMLElement>('[data-ocvd="question-fallback"]');
 
-    if (footer) {
+    const footer = findQuestionFooter();
+    const header = footer ? null : findQuestionHeaderActions();
+    const bar = footer ?? header;
+
+    if (bar) {
+      if (isVisibleNode(existingMic) && !isVisibleNode(bar)) {
+        return;
+      }
       removeNode(fallback);
-      if (existingMic && !footer.contains(existingMic)) {
+      if (existingMic && !bar.contains(existingMic)) {
         existingMic.remove();
       }
-      const mic = dedupe(footer, 'button[data-ocvd="question-mic"]') ?? makeMicButton("question");
-      const buttons = [...footer.querySelectorAll<HTMLButtonElement>("button")].filter(
-        (button) => button !== mic && !button.disabled,
+      const mic = dedupe(bar, 'button[data-ocvd="question-mic"]') ?? makeMicButton("question");
+      const buttons = [...bar.querySelectorAll<HTMLButtonElement>("button")].filter(
+        (button) => !button.hasAttribute("data-ocvd"),
       );
       const anchor = buttons[buttons.length - 1] ?? null;
-      if (mic.parentElement !== footer || mic.nextElementSibling !== anchor) {
-        footer.insertBefore(mic, anchor);
+      if (mic.parentElement !== bar || mic.nextElementSibling !== anchor) {
+        bar.insertBefore(mic, anchor);
       }
       return;
     }
 
-    const textarea = findQuestionInput();
-    const containerParent = textarea?.closest(SELECTORS.questionForm) ?? textarea?.closest("form");
-    if (!containerParent) {
+    const option = findQuestionCustomOption();
+    const input = option ? null : findQuestionInput();
+    const legacyForm = input
+      ? (input.closest<HTMLElement>(SELECTORS.questionForm) ?? input.closest<HTMLElement>("form"))
+      : null;
+    const container = option ?? legacyForm;
+
+    if (!container) {
+      removeNode(fallback);
+      existingMic?.remove();
       return;
     }
-    if (fallback?.isConnected) {
+
+    if (isVisibleNode(existingMic) && !isVisibleNode(container)) {
       return;
     }
-    if (existingMic) {
+
+    if (fallback?.isConnected && fallback.parentElement === container) {
+      if (!fallback.querySelector('button[data-ocvd="question-mic"]')) {
+        fallback.appendChild(makeMicButton("question"));
+      }
+      placeBesideField(container, fallback);
+      const extra = container.querySelectorAll('[data-ocvd="question-fallback"]');
+      for (const node of [...extra].slice(1)) {
+        node.remove();
+      }
+      return;
+    }
+
+    removeNode(fallback);
+    if (existingMic && !container.contains(existingMic)) {
       existingMic.remove();
     }
-    const container = document.createElement("div");
-    container.className = "ocvd-question-fallback";
-    container.dataset.ocvd = "question-fallback";
-    container.appendChild(makeMicButton("question"));
-    containerParent.appendChild(container);
+    const wrapper = document.createElement("div");
+    wrapper.className = "ocvd-question-fallback";
+    wrapper.dataset.ocvd = "question-fallback";
+    wrapper.appendChild(makeMicButton("question"));
+    placeBesideField(container, wrapper);
   };
 
   const inject = (): void => {
@@ -814,10 +908,21 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
       if (isOurs(mutation.target)) {
         continue;
       }
-      const changed = [...mutation.addedNodes, ...mutation.removedNodes];
-      if (changed.length === 0 || changed.some((node) => !isOurs(node))) {
-        scheduleInject();
-        return;
+      for (const node of mutation.addedNodes) {
+        if (!isOurs(node)) {
+          scheduleInject();
+          return;
+        }
+      }
+      for (const node of mutation.removedNodes) {
+        if (!(node instanceof Element)) {
+          continue;
+        }
+        const containedOurs = isOurs(node) || node.querySelector("[data-ocvd]") !== null;
+        if (containedOurs && !node.isConnected) {
+          scheduleInject();
+          return;
+        }
       }
     }
   };
@@ -836,6 +941,11 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
     inject();
     observer = new MutationObserver(handleMutations);
     observer.observe(document.documentElement, { childList: true, subtree: true });
+    heartbeat = setInterval(() => {
+      if (document.visibilityState === "visible") {
+        inject();
+      }
+    }, 1000);
     window.addEventListener("pageshow", scheduleInject);
     window.addEventListener("popstate", scheduleInject);
     document.addEventListener("visibilitychange", onVisibilityChange);
@@ -851,6 +961,10 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
   const destroy = (): void => {
     observer?.disconnect();
     observer = null;
+    if (heartbeat) {
+      clearInterval(heartbeat);
+      heartbeat = null;
+    }
     if (scheduled) {
       clearTimeout(scheduled);
       scheduled = null;

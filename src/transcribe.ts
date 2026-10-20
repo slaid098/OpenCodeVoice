@@ -1,4 +1,6 @@
+import { resolveSttEndpoint, resolveSttModel } from "./config.js";
 import { AbortError, HttpError, type RetryHooks, type RetryPolicy, httpRequest } from "./http.js";
+import { t } from "./i18n.js";
 import type { AppConfig, SttProviderId, TranscriptionResult } from "./types.js";
 
 export interface TranscribeOptions {
@@ -19,16 +21,17 @@ export async function transcribe(
   options: TranscribeOptions = {},
 ): Promise<TranscriptionResult> {
   if (audioBlob.size === 0) {
-    throw new SttError("Запись пустая. Попробуйте записать ещё раз.");
+    throw new SttError(t("stt.emptyRecording"));
   }
 
   const provider = config.stt.provider;
-  const endpoint = config.stt.endpoint.trim();
+  const endpoint = resolveSttEndpoint(config.stt);
   if (endpoint === "") {
-    throw new SttError("Не задан STT endpoint. Откройте настройки.");
+    throw new SttError(t("stt.noEndpoint"));
   }
+  const model = resolveSttModel(config.stt);
 
-  const responseFormat = resolveResponseFormat(provider, config.stt.model);
+  const responseFormat = resolveResponseFormat(provider, model);
   const optionalFields = hasOptionalFields(config);
   const policy = retryPolicy(config);
 
@@ -62,9 +65,9 @@ export async function transcribe(
 
     const text = parseTranscription(response.text, responseFormat);
     if (text === "") {
-      throw new SttError("Пустая расшифровка. Проверьте микрофон и попробуйте ещё раз.");
+      throw new SttError(t("stt.emptyTranscript"));
     }
-    return { text, provider, model: config.stt.model };
+    return { text, provider, model };
   } catch (error) {
     if (error instanceof AbortError) {
       throw error;
@@ -72,7 +75,7 @@ export async function transcribe(
     if (error instanceof SttError) {
       throw error;
     }
-    throw formatSttError(error);
+    throw formatSttError(error, { endpoint, provider });
   }
 }
 
@@ -83,8 +86,9 @@ export function buildFormData(
 ): FormData {
   const formData = new FormData();
   formData.append("file", audioBlob, audioFileName(audioBlob.type));
-  formData.append("model", config.stt.model);
-  formData.append("response_format", resolveResponseFormat(config.stt.provider, config.stt.model));
+  const model = resolveSttModel(config.stt);
+  formData.append("model", model);
+  formData.append("response_format", resolveResponseFormat(config.stt.provider, model));
 
   if (includeOptional) {
     const language = config.stt.language.trim();
@@ -122,14 +126,8 @@ export function parseTranscription(raw: string, responseFormat: "text" | "json")
   return text;
 }
 
-export function resolveResponseFormat(provider: SttProviderId, model: string): "text" | "json" {
-  if (provider === "custom") {
-    return "json";
-  }
-  if (provider === "openai" && model.startsWith("gpt-4o")) {
-    return "json";
-  }
-  return "text";
+export function resolveResponseFormat(provider: SttProviderId, _model: string): "text" | "json" {
+  return provider === "custom" ? "json" : "text";
 }
 
 export function audioFileName(mimeType: string): string {
@@ -153,34 +151,99 @@ export function retryPolicy(config: AppConfig): RetryPolicy {
   };
 }
 
-export function formatSttError(error: unknown): Error {
+const KEY_ERROR_PATTERNS = [
+  "invalid api key",
+  "invalid_api_key",
+  "incorrect api key",
+  "unauthorized",
+];
+
+const REGION_ERROR_PATTERNS = [
+  "unsupported_country_region_territory",
+  "country, region, or territory not supported",
+  "not available in your country",
+  "region is not supported",
+  "unsupported region",
+  "unsupported country",
+];
+
+function hasKeyError(body: string): boolean {
+  const text = body.toLowerCase();
+  return KEY_ERROR_PATTERNS.some((pattern) => text.includes(pattern));
+}
+
+/** A 403/451 that comes from a regional block, not from a bad API key. */
+export function isSttRegionBlock(status: number, body: string, endpoint?: string): boolean {
+  if (status !== 403 && status !== 451) {
+    return false;
+  }
+  const text = body.toLowerCase();
+  if (hasKeyError(text)) {
+    return false;
+  }
+  if (REGION_ERROR_PATTERNS.some((pattern) => text.includes(pattern))) {
+    return true;
+  }
+  if (status === 451) {
+    return true;
+  }
+  const host = hostOf(endpoint);
+  return (host === "api.groq.com" || host === "api.openai.com") && text.includes("forbidden");
+}
+
+function hostOf(endpoint: string | undefined): string {
+  if (!endpoint) {
+    return "";
+  }
+  try {
+    return new URL(endpoint).hostname.toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+export function formatSttError(
+  error: unknown,
+  context: { endpoint?: string; provider?: SttProviderId } = {},
+): Error {
   if (error instanceof HttpError) {
     const detail = error.body.trim();
     switch (error.status) {
       case 0:
-        return new SttError(`Не удалось связаться со STT: ${error.message}`);
+        return new SttError(t("stt.network", { message: error.message }));
       case 400:
-        return new SttError(`STT отклонил запрос: ${shorten(detail) || error.message}`);
+        return new SttError(t("stt.rejected", { detail: shorten(detail) || error.message }));
       case 401:
+        return new SttError(t("stt.invalidKey"));
       case 403:
-        return new SttError("Неверный или просроченный API-ключ STT. Проверьте настройки.");
+        if (hasKeyError(detail)) {
+          return new SttError(t("stt.invalidKey"));
+        }
+        if (isSttRegionBlock(error.status, detail, context.endpoint)) {
+          return new SttError(t("stt.regionBlocked"));
+        }
+        return new SttError(t("stt.forbidden"));
       case 404:
-        return new SttError("STT endpoint не найден (404). Проверьте URL в настройках.");
+        return new SttError(t("stt.notFound"));
       case 413:
-        return new SttError("Аудиофайл слишком большой для STT.");
+        return new SttError(t("stt.tooLarge"));
       case 429:
-        return new SttError("Слишком много запросов к STT. Подождите и повторите.");
+        return new SttError(t("stt.rateLimited"));
+      case 451:
+        return new SttError(t("stt.regionBlocked"));
       default:
         if (error.status >= 500) {
-          return new SttError("Сервер STT временно недоступен. Попробуйте позже.");
+          return new SttError(t("stt.unavailable"));
         }
-        return new SttError(`Ошибка STT (${error.status}): ${shorten(detail) || error.message}`);
+        return new SttError(
+          t("stt.httpError", { status: error.status, detail: shorten(detail) || error.message }),
+        );
     }
   }
   if (error instanceof Error) {
     return new SttError(error.message);
   }
-  return new SttError("Неизвестная ошибка STT");
+  return new SttError(t("stt.unknown"));
 }
 
 function hasOptionalFields(config: AppConfig): boolean {

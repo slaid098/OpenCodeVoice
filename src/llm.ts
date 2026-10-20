@@ -1,5 +1,6 @@
-import { DEFAULT_CLEANUP_PROMPT, getCleanupPrompt } from "./config.js";
+import { DEFAULT_CLEANUP_PROMPT_RU, getCleanupPrompt } from "./config.js";
 import { AbortError, HttpError, type RetryHooks, type RetryPolicy, httpRequest } from "./http.js";
+import { t } from "./i18n.js";
 import { retryPolicy } from "./transcribe.js";
 import type { AppConfig, CleanupResult } from "./types.js";
 
@@ -34,7 +35,7 @@ export async function cleanupText(
     return { text: rawText, fallback: true, reason: "empty-prompt", usedDefaultPrompt: true };
   }
   if (config.llm.provider === "ollama-cloud" && config.llm.apiKey.trim() === "") {
-    throw new LlmError("Не задан API-ключ Ollama Cloud. Откройте настройки LLM.");
+    throw new LlmError(t("llm.missingKey"));
   }
 
   const policy = retryPolicy(config);
@@ -122,27 +123,29 @@ export function formatLlmError(error: unknown): Error {
     const detail = shorten(error.body);
     switch (error.status) {
       case 0:
-        return new LlmError(`Не удалось связаться с LLM: ${error.message}`);
+        return new LlmError(t("llm.network", { message: error.message }));
       case 400:
-        return new LlmError(`LLM отклонил запрос: ${detail || error.message}`);
+        return new LlmError(t("llm.rejected", { detail: detail || error.message }));
       case 401:
       case 403:
-        return new LlmError("Неверный или просроченный API-ключ LLM. Проверьте настройки.");
+        return new LlmError(t("llm.invalidKey"));
       case 404:
-        return new LlmError("LLM endpoint не найден (404). Проверьте Base URL и модель.");
+        return new LlmError(t("llm.notFound"));
       case 429:
-        return new LlmError("Слишком много запросов к LLM. Подождите и повторите.");
+        return new LlmError(t("llm.rateLimited"));
       default:
         if (error.status >= 500) {
-          return new LlmError("Сервер LLM временно недоступен. Попробуйте позже.");
+          return new LlmError(t("llm.unavailable"));
         }
-        return new LlmError(`Ошибка LLM (${error.status}): ${detail || error.message}`);
+        return new LlmError(
+          t("llm.httpError", { status: error.status, detail: detail || error.message }),
+        );
     }
   }
   if (error instanceof Error) {
     return new LlmError(error.message);
   }
-  return new LlmError("Неизвестная ошибка LLM");
+  return new LlmError(t("llm.unknown"));
 }
 
 async function requestCleanup(
@@ -254,7 +257,7 @@ async function postJson(
   try {
     return JSON.parse(response.text);
   } catch {
-    throw new LlmError("LLM вернул некорректный JSON.");
+    throw new LlmError(t("llm.invalidJson"));
   }
 }
 
@@ -318,7 +321,7 @@ export function parseContent(value: unknown): string {
 
 function buildMessages(prompt: string, raw: string): Array<{ role: string; content: string }> {
   return [
-    { role: "system", content: prompt || DEFAULT_CLEANUP_PROMPT },
+    { role: "system", content: prompt || DEFAULT_CLEANUP_PROMPT_RU },
     { role: "user", content: raw },
   ];
 }

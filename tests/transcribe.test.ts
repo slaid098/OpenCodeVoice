@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { createDefaultConfig } from "../src/config.js";
 import { AbortError, HttpError } from "../src/http.js";
+import { setLocale } from "../src/i18n.js";
 import {
   SttError,
   audioFileName,
   buildFormData,
   formatSttError,
+  isSttRegionBlock,
   parseTranscription,
   resolveResponseFormat,
   transcribe,
@@ -74,30 +76,19 @@ describe("transcribe", () => {
     }));
     const config = makeConfig((c) => {
       c.stt.provider = "custom";
-      c.stt.endpoint = "https://example.com/transcribe";
-      c.stt.model = "whisper-local";
+      c.stt.customEndpoint = "https://example.com/transcribe";
+      c.stt.customModel = "whisper-local";
       c.stt.apiKey = "";
     });
     const result = await transcribe(audio(), config);
     expect(result.text).toBe("JSON текст");
     expect(result.provider).toBe("custom");
+    expect(result.model).toBe("whisper-local");
     const body = __getRequests()[0]?.data as FormData;
     expect(body.get("response_format")).toBe("json");
+    expect(body.get("model")).toBe("whisper-local");
+    expect(__getRequests()[0]?.url).toBe("https://example.com/transcribe");
     expect(__getRequests()[0]?.headers).toEqual({});
-  });
-
-  it("uses JSON for gpt-4o transcribe models", async () => {
-    __setXmlhttpResponder(() => ({
-      status: 200,
-      responseText: JSON.stringify({ text: "gpt" }),
-    }));
-    const config = makeConfig((c) => {
-      c.stt.provider = "openai";
-      c.stt.model = "gpt-4o-mini-transcribe";
-    });
-    const result = await transcribe(audio(), config);
-    expect(result.text).toBe("gpt");
-    expect((__getRequests()[0]?.data as FormData).get("response_format")).toBe("json");
   });
 
   it("retries without optional fields when the endpoint rejects them with 400", async () => {
@@ -140,7 +131,9 @@ describe("transcribe", () => {
   it("rejects empty audio and empty endpoint", async () => {
     await expect(transcribe(new Blob([]), makeConfig())).rejects.toBeInstanceOf(SttError);
     const config = makeConfig((c) => {
-      c.stt.endpoint = "  ";
+      c.stt.provider = "custom";
+      c.stt.customEndpoint = "  ";
+      c.stt.customModel = "my-model";
     });
     await expect(transcribe(audio(), config)).rejects.toThrow(/Не задан STT endpoint/);
     expect(__getRequests()).toHaveLength(0);
@@ -149,6 +142,65 @@ describe("transcribe", () => {
   it("maps auth errors", async () => {
     __setXmlhttpResponder(() => ({ status: 401, responseText: "unauthorized" }));
     await expect(transcribe(audio(), makeConfig())).rejects.toThrow(/API-ключ STT/);
+  });
+
+  it("reports the OpenAI region block for a 403 with the official body", async () => {
+    __setXmlhttpResponder(() => ({
+      status: 403,
+      responseText: JSON.stringify({
+        error: {
+          code: "unsupported_country_region_territory",
+          message: "Country, region, or territory not supported",
+          param: null,
+          type: "request_forbidden",
+        },
+      }),
+    }));
+    const config = makeConfig((c) => {
+      c.stt.provider = "custom";
+      c.stt.customEndpoint = "https://api.openai.com/v1/audio/transcriptions";
+      c.stt.customModel = "whisper-1";
+    });
+    await expect(transcribe(audio(), config)).rejects.toThrow(
+      /блокирует запросы из вашего региона/,
+    );
+  });
+
+  it("reports the Groq region block for a plain Forbidden body", async () => {
+    __setXmlhttpResponder(() => ({
+      status: 403,
+      responseText: JSON.stringify({ error: { message: "Forbidden" } }),
+    }));
+    await expect(transcribe(audio(), makeConfig())).rejects.toThrow(
+      /блокирует запросы из вашего региона/,
+    );
+  });
+
+  it("reports a 451 as a region block", async () => {
+    __setXmlhttpResponder(() => ({ status: 451, responseText: "unavailable for legal reasons" }));
+    await expect(transcribe(audio(), makeConfig())).rejects.toThrow(
+      /блокирует запросы из вашего региона/,
+    );
+  });
+
+  it("reports a key error for a 403 that mentions the key", async () => {
+    __setXmlhttpResponder(() => ({ status: 403, responseText: "Invalid API key provided" }));
+    const config = makeConfig((c) => {
+      c.stt.provider = "custom";
+      c.stt.customEndpoint = "https://proxy.example.com/transcribe";
+      c.stt.customModel = "my-model";
+    });
+    await expect(transcribe(audio(), config)).rejects.toThrow(/API-ключ STT/);
+  });
+
+  it("reports a generic forbidden for an unknown 403", async () => {
+    __setXmlhttpResponder(() => ({ status: 403, responseText: "nope" }));
+    const config = makeConfig((c) => {
+      c.stt.provider = "custom";
+      c.stt.customEndpoint = "https://proxy.example.com/transcribe";
+      c.stt.customModel = "my-model";
+    });
+    await expect(transcribe(audio(), config)).rejects.toThrow(/Доступ к STT запрещён \(403\)/);
   });
 
   it("maps not found errors", async () => {
@@ -233,9 +285,26 @@ describe("transcribe helpers", () => {
 
   it("resolves response formats", () => {
     expect(resolveResponseFormat("custom", "x")).toBe("json");
-    expect(resolveResponseFormat("openai", "gpt-4o-transcribe")).toBe("json");
-    expect(resolveResponseFormat("openai", "whisper-1")).toBe("text");
     expect(resolveResponseFormat("groq", "whisper-large-v3")).toBe("text");
+  });
+
+  it("classifies regional blocks only for known bodies and hosts", () => {
+    expect(
+      isSttRegionBlock(
+        403,
+        '{"error":{"code":"unsupported_country_region_territory"}}',
+        "https://example.com/transcribe",
+      ),
+    ).toBe(true);
+    expect(
+      isSttRegionBlock(403, '{"error":{"message":"Forbidden"}}', "https://api.groq.com/x"),
+    ).toBe(true);
+    expect(
+      isSttRegionBlock(403, '{"error":{"message":"Forbidden"}}', "https://proxy.example.com/x"),
+    ).toBe(false);
+    expect(isSttRegionBlock(451, "blocked", "https://api.groq.com/x")).toBe(true);
+    expect(isSttRegionBlock(403, "invalid api key", "https://api.groq.com/x")).toBe(false);
+    expect(isSttRegionBlock(401, "unauthorized", "https://api.groq.com/x")).toBe(false);
   });
 
   it("picks file names from MIME types", () => {
@@ -255,5 +324,25 @@ describe("transcribe helpers", () => {
     expect(formatSttError(new HttpError(500, "down", true)).message).toMatch(/временно недоступен/);
     expect(formatSttError(new Error("plain")).message).toBe("plain");
     expect(formatSttError("weird").message).toMatch(/Неизвестная ошибка/);
+  });
+
+  it("uses the endpoint for the 403 classification", () => {
+    const groq = formatSttError(new HttpError(403, "forbidden", false, "Forbidden"), {
+      endpoint: "https://api.groq.com/openai/v1/audio/transcriptions",
+      provider: "groq",
+    });
+    expect(groq.message).toMatch(/блокирует запросы из вашего региона/);
+
+    const proxy = formatSttError(new HttpError(403, "forbidden", false, "Forbidden"), {
+      endpoint: "https://proxy.example.com/transcribe",
+      provider: "custom",
+    });
+    expect(proxy.message).toMatch(/Доступ к STT запрещён/);
+  });
+
+  it("localizes messages for English", () => {
+    setLocale("en");
+    const english = formatSttError(new HttpError(401, "unauthorized", false), {});
+    expect(english.message).toMatch(/Invalid or expired STT API key/);
   });
 });

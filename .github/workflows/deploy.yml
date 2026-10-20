@@ -49,13 +49,14 @@ jobs:
           git add -A
           git commit -m "deploy: ${GITHUB_SHA::7}"
 
-          # GitHub mirror: the automatic token is enough.
+          # GitHub is the primary update host (@updateURL/@downloadURL/@icon).
+          # The automatic token is enough for it.
           git remote add github "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           git push --force github dist
 
-          # Forgejo is the @updateURL host. It needs a PAT with write:repository
-          # stored as the FORGEJO_TOKEN secret; without it the job warns instead
-          # of failing the whole CI run.
+          # Forgejo is a mirror. It needs a PAT with write:repository stored as
+          # the FORGEJO_TOKEN secret; without it the job warns instead of
+          # failing the whole CI run.
           if [ -n "${FORGEJO_TOKEN}" ]; then
             git remote add forgejo "https://slaid098:${FORGEJO_TOKEN}@git.slaid098.dev/slaid098/opencode-voice-dictation.git"
             git push --force forgejo dist

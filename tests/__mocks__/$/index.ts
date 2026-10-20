@@ -39,7 +39,7 @@ export const GM_registerMenuCommand = (
 export const GM_info = {
   script: {
     name: "OpenCode Voice Dictation",
-    version: "2.0.0",
+    version: "0.9.0",
     namespace: "https://github.com/slaid098/opencode-voice-dictation",
   },
   scriptHandler: "Tampermonkey",

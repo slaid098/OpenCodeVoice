@@ -1,3 +1,4 @@
+import { t } from "./i18n.js";
 import type { FailedDictation } from "./types.js";
 
 const DB_NAME = "opencode-voice-dictation";
@@ -158,10 +159,10 @@ export async function audioToArrayBuffer(blob: Blob): Promise<ArrayBuffer> {
       if (reader.result instanceof ArrayBuffer) {
         resolve(reader.result);
       } else {
-        reject(new Error("Не удалось прочитать аудио"));
+        reject(new Error(t("storage.readAudioFailed")));
       }
     };
-    reader.onerror = () => reject(reader.error ?? new Error("Не удалось прочитать аудио"));
+    reader.onerror = () => reject(reader.error ?? new Error(t("storage.readAudioFailed")));
     reader.readAsArrayBuffer(blob);
   });
 }
@@ -194,8 +195,8 @@ function openDb(): Promise<IDBDatabase> {
       }
     };
     request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error ?? new Error("Не удалось открыть IndexedDB"));
-    request.onblocked = () => reject(new Error("IndexedDB заблокирована другой вкладкой"));
+    request.onerror = () => reject(request.error ?? new Error(t("storage.openFailed")));
+    request.onblocked = () => reject(new Error(t("storage.blocked")));
   });
 }
 
@@ -218,15 +219,15 @@ async function deleteOldest(db: IDBDatabase): Promise<void> {
 function requestToPromise<T>(request: IDBRequest<T>): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error ?? new Error("Ошибка IndexedDB"));
+    request.onerror = () => reject(request.error ?? new Error(t("storage.error")));
   });
 }
 
 function transactionDone(tx: IDBTransaction): Promise<void> {
   return new Promise<void>((resolve, reject) => {
     tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error ?? new Error("Ошибка транзакции IndexedDB"));
-    tx.onabort = () => reject(tx.error ?? new Error("Транзакция IndexedDB отменена"));
+    tx.onerror = () => reject(tx.error ?? new Error(t("storage.txError")));
+    tx.onabort = () => reject(tx.error ?? new Error(t("storage.txAborted")));
   });
 }
 

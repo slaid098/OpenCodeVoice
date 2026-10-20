@@ -1,16 +1,26 @@
 import { GM_info } from "$";
 import {
-  DEFAULT_CLEANUP_PROMPT,
+  STT_PRESETS,
   applyLlmPreset,
   applySttPreset,
+  defaultCleanupPrompt,
   validateConfig,
 } from "./config.js";
 import { isAbortError } from "./http.js";
+import { type MessageKey, getLocale, resolveLocale, setLocale, t } from "./i18n.js";
 import { getSelectorStatus } from "./insert.js";
 import { cleanupText } from "./llm.js";
 import { ModelsUnsupportedError, listLlmModels, listSttModels } from "./models.js";
 import { clearFailures, estimateStorage, listFailures } from "./storage.js";
-import type { AppConfig, CleanupResult, LlmProviderId, ModelInfo, SttProviderId } from "./types.js";
+import type {
+  AppConfig,
+  CleanupResult,
+  FailureStage,
+  LlmProviderId,
+  LocalePreference,
+  ModelInfo,
+  SttProviderId,
+} from "./types.js";
 
 export interface SettingsPanelDeps {
   getConfig: () => AppConfig;
@@ -30,32 +40,29 @@ export interface SettingsPanel {
 type TabId = "stt" | "llm" | "behavior" | "diagnostics";
 type StatusKind = "ok" | "warn" | "error" | "info";
 
-const TABS: ReadonlyArray<{ id: TabId; label: string }> = [
-  { id: "stt", label: "STT" },
-  { id: "llm", label: "Очистка" },
-  { id: "behavior", label: "Поведение" },
-  { id: "diagnostics", label: "Диагностика" },
+const TABS: ReadonlyArray<{ id: TabId; key: MessageKey }> = [
+  { id: "stt", key: "settings.tabs.stt" },
+  { id: "llm", key: "settings.tabs.llm" },
+  { id: "behavior", key: "settings.tabs.behavior" },
+  { id: "diagnostics", key: "settings.tabs.diagnostics" },
 ];
 
-const SAMPLE_TEXT = "ну вот, ээ, это тест очистки текста, как бы, короче, проверка связи.";
-
-const STT_OPTIONS: ReadonlyArray<{ value: SttProviderId; label: string }> = [
-  { value: "groq", label: "Groq (Whisper)" },
-  { value: "openai", label: "OpenAI (Whisper)" },
-  { value: "custom", label: "Свой OpenAI-compatible" },
+const STT_OPTIONS: ReadonlyArray<{ value: SttProviderId; key: MessageKey }> = [
+  { value: "groq", key: "settings.stt.provider.groq" },
+  { value: "custom", key: "settings.stt.provider.custom" },
 ];
 
-const LLM_OPTIONS: ReadonlyArray<{ value: LlmProviderId; label: string }> = [
-  { value: "ollama-cloud", label: "Ollama Cloud" },
-  { value: "ollama-local", label: "Ollama Local" },
-  { value: "custom-openai", label: "Свой OpenAI-compatible" },
+const LLM_OPTIONS: ReadonlyArray<{ value: LlmProviderId; key: MessageKey }> = [
+  { value: "ollama-cloud", key: "settings.llm.provider.ollama-cloud" },
+  { value: "ollama-local", key: "settings.llm.provider.ollama-local" },
+  { value: "custom-openai", key: "settings.llm.provider.custom" },
 ];
 
-const STAGE_LABELS: Record<string, string> = {
-  stt: "распознавание",
-  llm: "очистка",
-  insert: "вставка",
-  submit: "отправка",
+const STAGE_KEY: Record<FailureStage, MessageKey> = {
+  stt: "settings.stage.stt",
+  llm: "settings.stage.llm",
+  insert: "settings.stage.insert",
+  submit: "settings.stage.submit",
 };
 
 let idCounter = 0;
@@ -79,9 +86,9 @@ export function createSettingsPanel(deps: SettingsPanelDeps): SettingsPanel {
   const scriptVersion = (): string => {
     try {
       const version = GM_info?.script?.version;
-      return typeof version === "string" && version !== "" ? version : "2.0.0";
+      return typeof version === "string" && version !== "" ? version : "0.9.0";
     } catch {
-      return "2.0.0";
+      return "0.9.0";
     }
   };
 
@@ -130,7 +137,11 @@ export function createSettingsPanel(deps: SettingsPanelDeps): SettingsPanel {
     }
   };
 
-  const setBusy = (button: HTMLButtonElement, busy: boolean, busyLabel = "Проверяю…"): void => {
+  const setBusy = (
+    button: HTMLButtonElement,
+    busy: boolean,
+    busyLabel = t("settings.loading"),
+  ): void => {
     if (busy) {
       button.dataset.idleLabel = button.textContent ?? "";
       button.textContent = busyLabel;
@@ -146,7 +157,7 @@ export function createSettingsPanel(deps: SettingsPanelDeps): SettingsPanel {
     if (error instanceof Error && error.message.trim() !== "") {
       return error.message;
     }
-    return "Неизвестная ошибка.";
+    return t("common.unknownError");
   };
 
   const cloneConfig = (config: AppConfig): AppConfig =>
@@ -160,15 +171,17 @@ export function createSettingsPanel(deps: SettingsPanelDeps): SettingsPanel {
       draft.llm.prompt = promptTextarea.value;
     }
     const config = cloneConfig(draft);
-    config.stt.endpoint = config.stt.endpoint.trim();
     config.stt.apiKey = config.stt.apiKey.trim();
-    config.stt.model = config.stt.model.trim();
+    config.stt.groqModel = config.stt.groqModel.trim();
+    config.stt.customEndpoint = config.stt.customEndpoint.trim();
+    config.stt.customModel = config.stt.customModel.trim();
     config.stt.language = config.stt.language.trim();
     config.llm.baseUrl = config.llm.baseUrl.trim();
     config.llm.apiKey = config.llm.apiKey.trim();
     config.llm.model = config.llm.model.trim();
 
-    const errors = validateConfig(config);
+    const targetLocale = resolveLocale(config.ui.language);
+    const errors = validateConfig(config, targetLocale);
     if (errors.length > 0) {
       setStatus(errors.slice(0, 3).join(" • "), "error");
       return;
@@ -176,8 +189,9 @@ export function createSettingsPanel(deps: SettingsPanelDeps): SettingsPanel {
 
     try {
       deps.saveConfig(config);
+      setLocale(targetLocale);
       deps.onSaved?.(cloneConfig(config));
-      setStatus("Сохранено.", "ok");
+      setStatus(t("settings.saved"), "ok");
       if (closeTimer) {
         clearTimeout(closeTimer);
       }
@@ -186,7 +200,7 @@ export function createSettingsPanel(deps: SettingsPanelDeps): SettingsPanel {
         close();
       }, 450);
     } catch (error) {
-      setStatus(`Не удалось сохранить: ${errorMessage(error)}`, "error");
+      setStatus(t("settings.saveFailed", { message: errorMessage(error) }), "error");
     }
   };
 
@@ -194,12 +208,12 @@ export function createSettingsPanel(deps: SettingsPanelDeps): SettingsPanel {
     const header = element("div", "header");
     const titleWrap = element("div", "title-wrap");
     titleWrap.append(
-      element("h2", "title", "Голосовой ввод"),
-      element("div", "subtitle", `OpenCode 2 · v${scriptVersion()}`),
+      element("h2", "title", t("settings.title")),
+      element("div", "subtitle", t("settings.subtitle", { version: scriptVersion() })),
     );
     closeButton = element("button", "icon-btn", "×");
     closeButton.type = "button";
-    closeButton.setAttribute("aria-label", "Закрыть настройки");
+    closeButton.setAttribute("aria-label", t("settings.close"));
     closeButton.addEventListener("click", close);
     header.append(titleWrap, closeButton);
     return header;
@@ -209,7 +223,7 @@ export function createSettingsPanel(deps: SettingsPanelDeps): SettingsPanel {
     const tabs = element("div", "tabs");
     tabs.setAttribute("role", "tablist");
     for (const tab of TABS) {
-      const button = element("button", "tab", tab.label);
+      const button = element("button", "tab", t(tab.key));
       button.type = "button";
       button.setAttribute("role", "tab");
       button.dataset.tab = tab.id;
@@ -616,7 +630,7 @@ export function createSettingsPanel(deps: SettingsPanelDeps): SettingsPanel {
     const sheet = element("div", "sheet");
     sheet.setAttribute("role", "dialog");
     sheet.setAttribute("aria-modal", "true");
-    sheet.setAttribute("aria-label", "Настройки голосового ввода");
+    sheet.setAttribute("aria-label", t("settings.title"));
 
     contentEl = element("div", "content");
 
@@ -624,7 +638,7 @@ export function createSettingsPanel(deps: SettingsPanelDeps): SettingsPanel {
     footerStatusEl = element("div", "footer-status");
     footerStatusEl.setAttribute("role", "status");
     footerStatusEl.setAttribute("aria-live", "polite");
-    saveButton = element("button", "primary-btn", "Сохранить");
+    saveButton = element("button", "primary-btn", t("common.save"));
     saveButton.type = "button";
     saveButton.addEventListener("click", save);
     footer.append(footerStatusEl, saveButton);
@@ -636,41 +650,76 @@ export function createSettingsPanel(deps: SettingsPanelDeps): SettingsPanel {
     renderContent();
   };
 
+  const sampleText = (): string =>
+    resolveLocale(draft?.ui.language ?? "auto") === "ru"
+      ? t("settings.sample.ru")
+      : t("settings.sample.en");
+
   const buildSttTab = (): HTMLElement => {
     const panel = element("div", "tab-panel");
-    const recognition = section(
-      "Распознавание речи",
-      "Аудио уходит напрямую выбранному STT-провайдеру. Ключ хранится в настройках Tampermonkey.",
-    );
+    const provider = draft?.stt.provider ?? "groq";
+    const isCustom = provider === "custom";
+    const recognition = section(t("settings.stt.section"), t("settings.stt.sectionHint"));
 
-    addSelect(recognition, "Провайдер", STT_OPTIONS, draft?.stt.provider ?? "groq", (value) => {
-      if (!draft) return;
-      draft.stt = applySttPreset(draft.stt, value);
-      renderContent();
-    });
-
-    addPasswordField(recognition, "API-ключ", draft?.stt.apiKey ?? "", (value) => {
-      if (draft) draft.stt.apiKey = value;
-    });
-
-    addTextInput(
+    addSelect(
       recognition,
-      "Endpoint",
-      draft?.stt.endpoint ?? "",
+      t("settings.stt.provider"),
+      STT_OPTIONS.map((option) => ({ value: option.value, label: t(option.key) })),
+      provider,
       (value) => {
-        if (draft) draft.stt.endpoint = value;
+        if (!draft) return;
+        draft.stt = applySttPreset(draft.stt, value);
+        renderContent();
       },
-      { type: "url", placeholder: "https://api.groq.com/openai/v1/audio/transcriptions" },
     );
 
+    if (isCustom) {
+      addTextInput(
+        recognition,
+        t("settings.stt.endpoint"),
+        draft?.stt.customEndpoint ?? "",
+        (value) => {
+          if (draft) draft.stt.customEndpoint = value;
+        },
+        {
+          type: "url",
+          placeholder: "https://api.openai.com/v1/audio/transcriptions",
+        },
+      );
+    } else {
+      recognition.appendChild(
+        element(
+          "div",
+          "hint",
+          t("settings.stt.groqEndpoint", { endpoint: STT_PRESETS.groq.endpoint }),
+        ),
+      );
+    }
+
+    addPasswordField(
+      recognition,
+      t("settings.stt.apiKey"),
+      draft?.stt.apiKey ?? "",
+      (value) => {
+        if (draft) draft.stt.apiKey = value;
+      },
+      isCustom ? t("settings.stt.customKeyHint") : undefined,
+    );
+
+    const setModel = (value: string): void => {
+      if (!draft) return;
+      if (isCustom) {
+        draft.stt.customModel = value;
+      } else {
+        draft.stt.groqModel = value;
+      }
+    };
     addModelInput(
       recognition,
-      "Модель",
-      draft?.stt.model ?? "",
-      (value) => {
-        if (draft) draft.stt.model = value;
-      },
-      "Загрузить модели",
+      t("settings.stt.model"),
+      isCustom ? (draft?.stt.customModel ?? "") : (draft?.stt.groqModel ?? ""),
+      setModel,
+      t("settings.stt.loadModels"),
       async (button, status, input, datalist) => {
         if (!draft) {
           setBusy(button, false);
@@ -682,9 +731,9 @@ export function createSettingsPanel(deps: SettingsPanelDeps): SettingsPanel {
           fillDatalist(datalist, models);
           if (input.value.trim() === "" && models[0]) {
             input.value = models[0].id;
-            draft.stt.model = models[0].id;
+            setModel(models[0].id);
           }
-          setInlineStatus(status, `Модели загружены: ${models.length}.`, "ok");
+          setInlineStatus(status, t("settings.stt.modelsLoaded", { count: models.length }), "ok");
         } catch (error) {
           if (controller.signal.aborted || isAbortError(error)) {
             return;
@@ -699,65 +748,58 @@ export function createSettingsPanel(deps: SettingsPanelDeps): SettingsPanel {
           setBusy(button, false);
         }
       },
+      isCustom ? "" : STT_PRESETS.groq.model,
     );
 
     addTextInput(
       recognition,
-      "Язык",
+      t("settings.stt.language"),
       draft?.stt.language ?? "",
       (value) => {
         if (draft) draft.stt.language = value;
       },
-      { placeholder: "ru или пусто — автоопределение" },
+      { placeholder: t("settings.stt.languagePlaceholder") },
     );
 
     addTextArea(
       recognition,
-      "Подсказка распознаванию",
+      t("settings.stt.prompt"),
       draft?.stt.prompt ?? "",
       (value) => {
         if (draft) draft.stt.prompt = value;
       },
-      "Имена, термины и названия, которые Whisper должен узнать. Необязательно.",
+      t("settings.stt.promptHint"),
       3,
     );
 
     addNumberInput(
       recognition,
-      "Temperature",
+      t("settings.stt.temperature"),
       draft?.stt.temperature ?? 0,
       (value) => {
         if (draft) draft.stt.temperature = value;
       },
-      { min: 0, max: 1, step: 0.1, hint: "Для расшифровки обычно 0." },
+      { min: 0, max: 1, step: 0.1, hint: t("settings.stt.temperatureHint") },
     );
 
     const testStatus = element("div", "inline-status");
     testStatus.hidden = true;
-    const testButton = element("button", "secondary-btn", "Проверить подключение");
+    const testButton = element("button", "secondary-btn", t("settings.stt.test"));
     testButton.type = "button";
     testButton.addEventListener("click", async () => {
       if (!draft) return;
       const controller = startTest();
-      setBusy(testButton, true);
-      setInlineStatus(testStatus, "Проверяю доступность и список моделей…", "info");
+      setBusy(testButton, true, t("settings.loading"));
+      setInlineStatus(testStatus, t("settings.stt.testing"), "info");
       try {
         const models = await listSttModels(draft, controller.signal);
-        setInlineStatus(
-          testStatus,
-          `Подключение работает. Доступно моделей: ${models.length}.`,
-          "ok",
-        );
+        setInlineStatus(testStatus, t("settings.stt.testOk", { count: models.length }), "ok");
       } catch (error) {
         if (controller.signal.aborted || isAbortError(error)) {
           return;
         }
         if (error instanceof ModelsUnsupportedError) {
-          setInlineStatus(
-            testStatus,
-            "Endpoint доступен, но список моделей не поддерживается. Это нормально для некоторых прокси.",
-            "warn",
-          );
+          setInlineStatus(testStatus, t("settings.stt.testUnsupported"), "warn");
         } else {
           setInlineStatus(testStatus, errorMessage(error), "error");
         }
@@ -773,24 +815,27 @@ export function createSettingsPanel(deps: SettingsPanelDeps): SettingsPanel {
 
   const buildLlmTab = (): HTMLElement => {
     const panel = element("div", "tab-panel");
-    const cleanup = section(
-      "Очистка текста",
-      "Расшифровка отправляется в LLM, которая убирает слова-паразиты и мат, исправляет пунктуацию и сохраняет смысл.",
-    );
+    const cleanup = section(t("settings.llm.section"), t("settings.llm.sectionHint"));
 
-    addCheckbox(cleanup, "Включить очистку LLM", draft?.llm.enabled ?? true, (checked) => {
+    addCheckbox(cleanup, t("settings.llm.enable"), draft?.llm.enabled ?? true, (checked) => {
       if (draft) draft.llm.enabled = checked;
     });
 
-    addSelect(cleanup, "Провайдер", LLM_OPTIONS, draft?.llm.provider ?? "ollama-cloud", (value) => {
-      if (!draft) return;
-      draft.llm = applyLlmPreset(draft.llm, value);
-      renderContent();
-    });
+    addSelect(
+      cleanup,
+      t("settings.llm.provider"),
+      LLM_OPTIONS.map((option) => ({ value: option.value, label: t(option.key) })),
+      draft?.llm.provider ?? "ollama-cloud",
+      (value) => {
+        if (!draft) return;
+        draft.llm = applyLlmPreset(draft.llm, value);
+        renderContent();
+      },
+    );
 
     addTextInput(
       cleanup,
-      "Base URL",
+      t("settings.llm.baseUrl"),
       draft?.llm.baseUrl ?? "",
       (value) => {
         if (draft) draft.llm.baseUrl = value;
@@ -798,18 +843,18 @@ export function createSettingsPanel(deps: SettingsPanelDeps): SettingsPanel {
       { type: "url", placeholder: "https://ollama.com" },
     );
 
-    addPasswordField(cleanup, "API-ключ", draft?.llm.apiKey ?? "", (value) => {
+    addPasswordField(cleanup, t("settings.llm.apiKey"), draft?.llm.apiKey ?? "", (value) => {
       if (draft) draft.llm.apiKey = value;
     });
 
     addModelInput(
       cleanup,
-      "Модель",
+      t("settings.llm.model"),
       draft?.llm.model ?? "",
       (value) => {
         if (draft) draft.llm.model = value;
       },
-      "Загрузить модели",
+      t("settings.llm.loadModels"),
       async (button, status, input, datalist) => {
         if (!draft) {
           setBusy(button, false);
@@ -823,7 +868,7 @@ export function createSettingsPanel(deps: SettingsPanelDeps): SettingsPanel {
             input.value = models[0].id;
             draft.llm.model = models[0].id;
           }
-          setInlineStatus(status, `Модели загружены: ${models.length}.`, "ok");
+          setInlineStatus(status, t("settings.llm.modelsLoaded", { count: models.length }), "ok");
         } catch (error) {
           if (controller.signal.aborted || isAbortError(error)) {
             return;
@@ -842,44 +887,47 @@ export function createSettingsPanel(deps: SettingsPanelDeps): SettingsPanel {
 
     addCheckbox(
       cleanup,
-      "Reasoning",
+      t("settings.llm.reasoning"),
       draft?.llm.reasoning ?? false,
       (checked) => {
         if (draft) draft.llm.reasoning = checked;
       },
-      "Обычно выключен: быстрее, дешевле и меньше лишних рассуждений.",
+      t("settings.llm.reasoningHint"),
     );
 
     const testStatus = element("div", "inline-status");
     testStatus.hidden = true;
-    const testButton = element("button", "secondary-btn", "Проверить подключение");
+    const testButton = element("button", "secondary-btn", t("settings.llm.test"));
     testButton.type = "button";
     testButton.addEventListener("click", async () => {
       if (!draft) return;
       const controller = startTest();
-      setBusy(testButton, true);
-      setInlineStatus(testStatus, "Проверяю модели и очистку тестовой фразы…", "info");
+      setBusy(testButton, true, t("settings.loading"));
+      setInlineStatus(testStatus, t("settings.llm.testing"), "info");
       try {
         const models = await listLlmModels(draft, controller.signal);
         if (!draft.llm.enabled) {
           setInlineStatus(
             testStatus,
-            `Модели доступны (${models.length}), но очистка выключена. Включите её для проверки LLM.`,
+            t("settings.llm.disabledWithModels", { count: models.length }),
             "warn",
           );
           return;
         }
-        const result = await cleanupText(SAMPLE_TEXT, draft, { signal: controller.signal });
+        const result = await cleanupText(sampleText(), draft, { signal: controller.signal });
         if (result.fallback) {
           setInlineStatus(
             testStatus,
-            `Модели доступны (${models.length}), очистка вернула сырой текст: ${reasonLabel(result.reason)}.`,
+            t("settings.llm.fallbackWithModels", {
+              count: models.length,
+              reason: reasonLabel(result.reason),
+            }),
             "warn",
           );
         } else {
           setInlineStatus(
             testStatus,
-            `Подключение работает. Пример: ${truncate(result.text, 240)}`,
+            t("settings.llm.testOk", { text: truncate(result.text, 240) }),
             "ok",
           );
         }
@@ -900,40 +948,42 @@ export function createSettingsPanel(deps: SettingsPanelDeps): SettingsPanel {
   };
 
   const buildPromptSection = (): HTMLElement => {
-    const promptSection = section(
-      "Промпт очистки",
-      "Текст диктовки добавляется автоматически отдельным сообщением — не вставляйте его в промпт.",
-    );
+    const promptSection = section(t("settings.prompt.section"), t("settings.prompt.hint"));
+    const defaults = defaultCleanupPrompt(resolveLocale(draft?.ui.language ?? "auto"));
     const textarea = element("textarea", "textarea prompt-textarea");
     textarea.id = uid("cleanup-prompt");
     textarea.rows = 10;
     textarea.spellcheck = true;
-    const initial = draft?.llm.prompt.trim() === "" ? DEFAULT_CLEANUP_PROMPT : draft?.llm.prompt;
-    textarea.value = initial ?? DEFAULT_CLEANUP_PROMPT;
+    const initial = draft?.llm.prompt.trim() === "" ? defaults : draft?.llm.prompt;
+    textarea.value = initial ?? defaults;
     promptTextarea = textarea;
-    const label = element("label", "field-label", "Системная инструкция");
+    const label = element("label", "field-label", t("settings.prompt.label"));
     label.htmlFor = textarea.id;
-    const counter = element("div", "hint", `Символов: ${textarea.value.length}`);
+    const counter = element(
+      "div",
+      "hint",
+      t("settings.prompt.counter", { count: textarea.value.length }),
+    );
     const field = element("div", "field");
     field.append(label, textarea, counter);
     textarea.addEventListener("input", () => {
       if (draft) draft.llm.prompt = textarea.value;
-      counter.textContent = `Символов: ${textarea.value.length}`;
+      counter.textContent = t("settings.prompt.counter", { count: textarea.value.length });
     });
 
     const tools = element("div", "tools-row");
-    const reset = element("button", "secondary-btn", "Сбросить к стандартному");
+    const reset = element("button", "secondary-btn", t("settings.prompt.reset"));
     reset.type = "button";
     let resetArmed = false;
     let resetTimer: ReturnType<typeof setTimeout> | null = null;
     reset.addEventListener("click", () => {
       if (!resetArmed) {
         resetArmed = true;
-        reset.textContent = "Нажмите ещё раз для сброса";
+        reset.textContent = t("settings.prompt.resetConfirm");
         resetTimer = setTimeout(() => {
           resetArmed = false;
           resetTimer = null;
-          reset.textContent = "Сбросить к стандартному";
+          reset.textContent = t("settings.prompt.reset");
         }, 3000);
         return;
       }
@@ -942,14 +992,14 @@ export function createSettingsPanel(deps: SettingsPanelDeps): SettingsPanel {
         resetTimer = null;
       }
       resetArmed = false;
-      reset.textContent = "Сбросить к стандартному";
-      textarea.value = DEFAULT_CLEANUP_PROMPT;
-      if (draft) draft.llm.prompt = DEFAULT_CLEANUP_PROMPT;
-      counter.textContent = `Символов: ${textarea.value.length}`;
-      setStatus("Промпт сброшен к стандартному. Нажмите «Сохранить».", "warn");
+      reset.textContent = t("settings.prompt.reset");
+      textarea.value = defaults;
+      if (draft) draft.llm.prompt = defaults;
+      counter.textContent = t("settings.prompt.counter", { count: textarea.value.length });
+      setStatus(t("settings.prompt.resetDone"), "warn");
     });
 
-    const testButton = element("button", "secondary-btn", "Проверить на примере");
+    const testButton = element("button", "secondary-btn", t("settings.prompt.test"));
     testButton.type = "button";
     const testStatus = element("div", "inline-status");
     testStatus.hidden = true;
@@ -959,21 +1009,17 @@ export function createSettingsPanel(deps: SettingsPanelDeps): SettingsPanel {
     testButton.addEventListener("click", async () => {
       if (!draft) return;
       if (!draft.llm.enabled) {
-        setInlineStatus(
-          testStatus,
-          "Очистка выключена. Включите её на этой вкладке, чтобы проверить промпт.",
-          "warn",
-        );
+        setInlineStatus(testStatus, t("settings.prompt.disabled"), "warn");
         return;
       }
       if (promptTextarea?.isConnected) {
         draft.llm.prompt = promptTextarea.value;
       }
       const controller = startTest();
-      setBusy(testButton, true, "Проверяю…");
-      setInlineStatus(testStatus, "Отправляю пример в LLM…", "info");
+      setBusy(testButton, true, t("settings.prompt.testing"));
+      setInlineStatus(testStatus, t("settings.prompt.sending"), "info");
       resultEl.hidden = true;
-      const sample = deps.getLastRawText?.()?.trim() || SAMPLE_TEXT;
+      const sample = deps.getLastRawText?.()?.trim() || sampleText();
       try {
         const result: CleanupResult = await cleanupText(sample, draft, {
           signal: controller.signal,
@@ -984,11 +1030,11 @@ export function createSettingsPanel(deps: SettingsPanelDeps): SettingsPanel {
         if (result.fallback) {
           setInlineStatus(
             testStatus,
-            `LLM вернул сырой текст: ${reasonLabel(result.reason)}.`,
+            t("settings.prompt.fallback", { reason: reasonLabel(result.reason) }),
             "warn",
           );
         } else {
-          setInlineStatus(testStatus, "Готово. Результат ниже.", "ok");
+          setInlineStatus(testStatus, t("settings.prompt.done"), "ok");
         }
         resultEl.hidden = false;
         resultEl.textContent = result.text;
@@ -1011,13 +1057,32 @@ export function createSettingsPanel(deps: SettingsPanelDeps): SettingsPanel {
   const buildBehaviorTab = (): HTMLElement => {
     const panel = element("div", "tab-panel");
 
+    const interfaceSection = section(
+      t("settings.behavior.interfaceSection"),
+      t("settings.behavior.languageHint"),
+    );
+    addSelect<LocalePreference>(
+      interfaceSection,
+      t("settings.behavior.language"),
+      [
+        { value: "auto", label: t("settings.behavior.language.auto") },
+        { value: "ru", label: t("settings.behavior.language.ru") },
+        { value: "en", label: t("settings.behavior.language.en") },
+      ],
+      draft?.ui.language ?? "auto",
+      (value) => {
+        if (draft) draft.ui.language = value;
+      },
+    );
+    panel.appendChild(interfaceSection);
+
     const submitSection = section(
-      "Автоотправка",
-      "После вставки текст можно отправить в OpenCode без второго нажатия.",
+      t("settings.behavior.autoSubmitSection"),
+      t("settings.behavior.autoSubmitSectionHint"),
     );
     addCheckbox(
       submitSection,
-      "Отправлять сообщения в composer",
+      t("settings.behavior.autoSubmit"),
       draft?.behavior.autoSubmit ?? true,
       (checked) => {
         if (draft) draft.behavior.autoSubmit = checked;
@@ -1025,40 +1090,40 @@ export function createSettingsPanel(deps: SettingsPanelDeps): SettingsPanel {
     );
     addCheckbox(
       submitSection,
-      "Отправлять ответы на вопросы OpenCode",
+      t("settings.behavior.autoSubmitQuestion"),
       draft?.behavior.autoSubmitQuestion ?? false,
       (checked) => {
         if (draft) draft.behavior.autoSubmitQuestion = checked;
       },
-      "По умолчанию выключено: ответ на вопрос лучше проверить перед отправкой.",
+      t("settings.behavior.autoSubmitQuestionHint"),
     );
     panel.appendChild(submitSection);
 
-    const failureSection = section("Ошибки и восстановление");
+    const failureSection = section(t("settings.behavior.failureSection"));
     addCheckbox(
       failureSection,
-      "При ошибке очистки вставлять сырой текст",
+      t("settings.behavior.fallbackToRaw"),
       draft?.behavior.fallbackToRaw ?? true,
       (checked) => {
         if (draft) draft.behavior.fallbackToRaw = checked;
       },
-      "Если LLM недоступна, расшифровка всё равно попадёт в поле ввода.",
+      t("settings.behavior.fallbackToRawHint"),
     );
     addCheckbox(
       failureSection,
-      "Сохранять аудио при ошибке STT",
+      t("settings.behavior.saveFailedAudio"),
       draft?.behavior.saveFailedAudio ?? true,
       (checked) => {
         if (draft) draft.behavior.saveFailedAudio = checked;
       },
-      "Позволяет повторить распознавание без повторной записи.",
+      t("settings.behavior.saveFailedAudioHint"),
     );
     panel.appendChild(failureSection);
 
-    const recordingSection = section("Запись и повторы");
+    const recordingSection = section(t("settings.behavior.recordingSection"));
     addNumberInput(
       recordingSection,
-      "Максимальная длительность записи, сек",
+      t("settings.behavior.maxRecording"),
       draft?.behavior.maxRecordingSeconds ?? 120,
       (value) => {
         if (draft) draft.behavior.maxRecordingSeconds = value;
@@ -1067,7 +1132,7 @@ export function createSettingsPanel(deps: SettingsPanelDeps): SettingsPanel {
     );
     addNumberInput(
       recordingSection,
-      "Попыток при сетевых ошибках",
+      t("settings.behavior.maxAttempts"),
       draft?.retry.maxAttempts ?? 3,
       (value) => {
         if (draft) draft.retry.maxAttempts = Math.round(value);
@@ -1076,7 +1141,7 @@ export function createSettingsPanel(deps: SettingsPanelDeps): SettingsPanel {
         min: 1,
         max: 5,
         step: 1,
-        hint: "Повторы действуют только для временных ошибок: сеть, 429, 5xx.",
+        hint: t("settings.behavior.maxAttemptsHint"),
       },
     );
     panel.appendChild(recordingSection);
@@ -1085,64 +1150,76 @@ export function createSettingsPanel(deps: SettingsPanelDeps): SettingsPanel {
 
   const buildDiagnosticsTab = (): HTMLElement => {
     const panel = element("div", "tab-panel");
-    const info = section("Версия и страница");
+    const info = section(t("settings.diag.infoSection"));
     const versionCard = element("div", "diag-card");
     const pageStatus = getSelectorStatus();
     versionCard.append(
-      diagRow("Userscript", scriptVersion()),
-      diagRow("Хост", window.location.host || "—"),
+      diagRow(t("settings.diag.version"), scriptVersion()),
+      diagRow(t("settings.diag.host"), window.location.host || "—"),
       diagRow(
-        "Страница OpenCode",
+        t("settings.diag.page"),
         pageStatus.composerDock || pageStatus.composerForm || pageStatus.composerEditor
-          ? "да"
-          : "не обнаружена",
+          ? t("settings.diag.pageYes")
+          : t("settings.diag.pageNo"),
       ),
     );
     info.appendChild(versionCard);
 
     const selectorsSection = section(
-      "Селекторы OpenCode 2",
-      "Если какой-то селектор пропал после обновления OpenCode, кнопка микрофона может не появиться.",
+      t("settings.diag.selectorsSection"),
+      t("settings.diag.selectorsHint"),
     );
     const selectorsCard = element("div", "diag-card");
     const renderSelectors = (): void => {
       selectorsCard.replaceChildren();
       const status = getSelectorStatus();
-      const labels: Record<keyof typeof status, string> = {
-        composerDock: "Composer dock",
-        composerForm: "Форма композера",
-        composerEditor: "Поле ввода",
-        composerActions: "Панель действий",
-        composerActionsResolved: "Панель действий (fallback)",
-        composerSubmit: "Кнопка отправки",
-        questionDock: "Question dock",
-        questionInput: "Поле вопроса",
-        questionFooter: "Футер вопроса",
+      const labels: Record<keyof typeof status, MessageKey> = {
+        composerDock: "settings.diag.selector.composerDock",
+        composerForm: "settings.diag.selector.composerForm",
+        composerEditor: "settings.diag.selector.composerEditor",
+        composerActions: "settings.diag.selector.composerActions",
+        composerActionsResolved: "settings.diag.selector.composerActionsResolved",
+        composerSubmit: "settings.diag.selector.composerSubmit",
+        composerMic: "settings.diag.selector.composerMic",
+        composerMicVisible: "settings.diag.selector.composerMicVisible",
+        questionDock: "settings.diag.selector.questionDock",
+        questionInput: "settings.diag.selector.questionInput",
+        questionInputCurrent: "settings.diag.selector.questionInputCurrent",
+        questionInputLegacy: "settings.diag.selector.questionInputLegacy",
+        questionHeaderActions: "settings.diag.selector.questionHeaderActions",
+        questionCustomOption: "settings.diag.selector.questionCustomOption",
+        questionFooter: "settings.diag.selector.questionFooter",
+        questionMic: "settings.diag.selector.questionMic",
+        questionMicVisible: "settings.diag.selector.questionMicVisible",
       };
       for (const key of Object.keys(labels) as Array<keyof typeof status>) {
         selectorsCard.appendChild(
-          diagRow(labels[key], status[key] ? "✓ есть" : "✗ нет", status[key]),
+          diagRow(
+            t(labels[key]),
+            status[key] ? t("settings.diag.present") : t("settings.diag.missing"),
+            status[key],
+          ),
         );
       }
     };
     renderSelectors();
-    const refreshSelectors = element("button", "secondary-btn", "Проверить снова");
+    const refreshSelectors = element("button", "secondary-btn", t("settings.diag.refresh"));
     refreshSelectors.type = "button";
     refreshSelectors.addEventListener("click", () => {
       renderSelectors();
-      setStatus("Селекторы проверены.", "info");
+      setStatus(t("settings.diag.checked"), "info");
     });
     selectorsSection.append(selectorsCard, refreshSelectors);
     info.appendChild(selectorsSection);
     panel.appendChild(info);
 
-    const storageSection = section("Хранилище IndexedDB");
-    const storageCard = element("div", "diag-card", "Загрузка…");
+    const storageSection = section(t("settings.diag.storageSection"));
+    const storageCard = element("div", "diag-card", t("common.loading"));
     storageSection.appendChild(storageCard);
     panel.appendChild(storageSection);
 
-    const failuresSection = section("Сохранённые ошибки");
-    const failuresCard = element("div", "diag-card", "Загрузка…");
+    const failuresSection = section(t("settings.diag.failuresSection"));
+    const failuresCard = element("div", "diag-card", t("common.loading"));
     failuresSection.appendChild(failuresCard);
     panel.appendChild(failuresSection);
 
@@ -1153,12 +1230,20 @@ export function createSettingsPanel(deps: SettingsPanelDeps): SettingsPanel {
           return;
         }
         storageCard.replaceChildren(
-          diagRow("Доступно", estimate.available ? "да" : "нет", estimate.available),
-          diagRow("Использовано", formatBytes(estimate.usage)),
-          diagRow("Квота", formatBytes(estimate.quota)),
           diagRow(
-            "Постоянное хранение",
-            estimate.persisted === undefined ? "—" : estimate.persisted ? "да" : "нет",
+            t("settings.diag.available"),
+            estimate.available ? t("common.yes") : t("common.no"),
+            estimate.available,
+          ),
+          diagRow(t("settings.diag.used"), formatBytes(estimate.usage)),
+          diagRow(t("settings.diag.quota"), formatBytes(estimate.quota)),
+          diagRow(
+            t("settings.diag.persisted"),
+            estimate.persisted === undefined
+              ? t("common.dash")
+              : estimate.persisted
+                ? t("common.yes")
+                : t("common.no"),
             estimate.persisted,
           ),
         );
@@ -1177,7 +1262,7 @@ export function createSettingsPanel(deps: SettingsPanelDeps): SettingsPanel {
         }
         failuresCard.replaceChildren();
         if (records.length === 0) {
-          failuresCard.appendChild(element("div", "hint", "Сохранённых ошибок нет."));
+          failuresCard.appendChild(element("div", "hint", t("settings.diag.noFailures")));
           return;
         }
         const latest = records[0];
@@ -1185,11 +1270,11 @@ export function createSettingsPanel(deps: SettingsPanelDeps): SettingsPanel {
           return;
         }
         failuresCard.append(
-          diagRow("Записей", String(records.length)),
-          diagRow("Последняя стадия", STAGE_LABELS[latest.stage] ?? latest.stage),
+          diagRow(t("settings.diag.records"), String(records.length)),
+          diagRow(t("settings.diag.lastStage"), t(STAGE_KEY[latest.stage])),
           diagRow(
-            "Время",
-            new Date(latest.createdAt).toLocaleString("ru-RU", {
+            t("settings.diag.time"),
+            new Date(latest.createdAt).toLocaleString(getLocale() === "ru" ? "ru-RU" : "en-US", {
               day: "2-digit",
               month: "2-digit",
               hour: "2-digit",
@@ -1197,25 +1282,32 @@ export function createSettingsPanel(deps: SettingsPanelDeps): SettingsPanel {
             }),
           ),
         );
-        const error = element("div", "diag-error", truncate(latest.error || "Без описания", 320));
+        const error = element(
+          "div",
+          "diag-error",
+          truncate(latest.error || t("settings.diag.noDescription"), 320),
+        );
         failuresCard.appendChild(error);
 
-        const clearButton = element("button", "secondary-btn", "Очистить сохранённые ошибки");
+        const clearButton = element("button", "secondary-btn", t("settings.diag.clear"));
         clearButton.type = "button";
         clearButton.addEventListener("click", async () => {
-          setBusy(clearButton, true, "Очищаю…");
+          setBusy(clearButton, true, t("settings.diag.clearing"));
           try {
             if (deps.onClearFailures) {
               await deps.onClearFailures();
             } else {
               await clearFailures();
             }
-            setStatus("Сохранённые ошибки очищены.", "ok");
+            setStatus(t("settings.diag.cleared"), "ok");
             if (activeTab === "diagnostics") {
               renderContent();
             }
           } catch (clearError) {
-            setStatus(`Не удалось очистить: ${errorMessage(clearError)}`, "error");
+            setStatus(
+              t("settings.diag.clearFailed", { message: errorMessage(clearError) }),
+              "error",
+            );
           } finally {
             setBusy(clearButton, false);
           }
@@ -1316,6 +1408,7 @@ function addPasswordField(
   labelText: string,
   value: string,
   onChange: (value: string) => void,
+  hint?: string,
 ): HTMLInputElement {
   const row = element("div", "password-row");
   const input = element("input", "input");
@@ -1326,15 +1419,15 @@ function addPasswordField(
   input.spellcheck = false;
   input.addEventListener("input", () => onChange(input.value));
 
-  const toggle = element("button", "inline-btn", "Показать");
+  const toggle = element("button", "inline-btn", t("common.show"));
   toggle.type = "button";
   toggle.addEventListener("click", () => {
     const show = input.type === "password";
     input.type = show ? "text" : "password";
-    toggle.textContent = show ? "Скрыть" : "Показать";
+    toggle.textContent = show ? t("common.hide") : t("common.show");
   });
   row.append(input, toggle);
-  addField(parent, labelText, row);
+  addField(parent, labelText, row, hint);
   return input;
 }
 
@@ -1384,6 +1477,7 @@ function addSelect<T extends string>(
   options: ReadonlyArray<{ value: T; label: string }>,
   value: T,
   onChange: (value: T) => void,
+  hint?: string,
 ): HTMLSelectElement {
   const select = element("select", "select");
   select.id = `ocvd-input-${++idCounter}`;
@@ -1394,7 +1488,7 @@ function addSelect<T extends string>(
   }
   select.value = value;
   select.addEventListener("change", () => onChange(select.value as T));
-  addField(parent, labelText, select);
+  addField(parent, labelText, select, hint);
   return select;
 }
 
@@ -1432,6 +1526,7 @@ function addModelInput(
     input: HTMLInputElement,
     datalist: HTMLDataListElement,
   ) => Promise<void>,
+  placeholder = "",
 ): { input: HTMLInputElement; status: HTMLElement } {
   const listId = `ocvd-models-${++idCounter}`;
   const row = element("div", "model-row");
@@ -1442,7 +1537,7 @@ function addModelInput(
   input.autocomplete = "off";
   input.spellcheck = false;
   input.setAttribute("list", listId);
-  input.placeholder = "Имя модели";
+  input.placeholder = placeholder || t("settings.modelPlaceholder");
   input.addEventListener("input", () => onChange(input.value));
 
   const datalist = element("datalist");
@@ -1455,7 +1550,7 @@ function addModelInput(
 
   button.addEventListener("click", async () => {
     const idleLabel = button.textContent ?? loadLabel;
-    button.textContent = "Загружаю…";
+    button.textContent = t("settings.loading");
     button.disabled = true;
     status.hidden = true;
     try {
@@ -1501,25 +1596,25 @@ function formatBytes(value: number | undefined): string {
   }
   const mb = value / (1024 * 1024);
   if (mb >= 100) {
-    return `${Math.round(mb)} МБ`;
+    return t("settings.megabytes", { value: Math.round(mb) });
   }
-  return `${mb.toFixed(1)} МБ`;
+  return t("settings.megabytes", { value: mb.toFixed(1) });
 }
 
 function reasonLabel(reason: string | undefined): string {
   switch (reason) {
     case "empty":
-      return "пустой текст";
+      return t("settings.reason.emptyText");
     case "empty-prompt":
-      return "пустой промпт";
+      return t("settings.reason.emptyPrompt");
     case "empty-result":
-      return "пустой ответ";
+      return t("settings.reason.emptyResponse");
     case "refusal":
-      return "отказ модели";
+      return t("settings.reason.refusal");
     case "too-long":
-      return "слишком длинный ответ";
+      return t("settings.reason.tooLong");
     default:
-      return "неизвестная причина";
+      return t("settings.reason.unknown");
   }
 }
 

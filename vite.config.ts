@@ -8,9 +8,9 @@ export default defineConfig({
       userscript: {
         name: "OpenCode Voice Dictation",
         namespace: "https://github.com/slaid098/opencode-voice-dictation",
-        version: "2.0.1",
+        version: "0.9.0",
         description:
-          "Voice dictation for OpenCode 2 web: Whisper STT, LLM cleanup, auto-submit, recovery — works on PC and mobile",
+          "Voice dictation for OpenCode 2 web: Whisper (Groq) or a custom OpenAI-compatible STT endpoint, optional LLM cleanup, RU/EN UI, auto-submit, recovery — works on PC and mobile",
         author: "slaid098",
         match: ["*://*/*"],
         noframes: true,
@@ -23,11 +23,11 @@ export default defineConfig({
         ],
         connect: ["*"],
         "run-at": "document-idle",
-        icon: "https://git.slaid098.dev/slaid098/opencode-voice-dictation/raw/branch/main/assets/icon.png",
+        icon: "https://raw.githubusercontent.com/slaid098/OpenCodeVoice/main/assets/icon.png",
         updateURL:
-          "https://git.slaid098.dev/slaid098/opencode-voice-dictation/raw/branch/dist/opencode-voice-dictation.meta.js",
+          "https://raw.githubusercontent.com/slaid098/OpenCodeVoice/dist/opencode-voice-dictation.meta.js",
         downloadURL:
-          "https://git.slaid098.dev/slaid098/opencode-voice-dictation/raw/branch/dist/opencode-voice-dictation.user.js",
+          "https://raw.githubusercontent.com/slaid098/OpenCodeVoice/dist/opencode-voice-dictation.user.js",
       },
       build: {
         fileName: "opencode-voice-dictation.user.js",

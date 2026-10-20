@@ -1,4 +1,5 @@
 import { GM_xmlhttpRequest, type GmAbortHandle } from "$";
+import { t } from "./i18n.js";
 
 export interface HttpRequestOptions {
   method?: "GET" | "POST";
@@ -40,7 +41,7 @@ export class HttpError extends Error {
 }
 
 export class AbortError extends Error {
-  constructor(message = "Запрос отменён") {
+  constructor(message = t("http.aborted")) {
     super(message);
     this.name = "AbortError";
   }
@@ -87,7 +88,7 @@ export async function httpRequest(
     }
   }
 
-  throw lastError ?? new HttpError(0, "Не удалось выполнить запрос", false);
+  throw lastError ?? new HttpError(0, t("http.failed"), false);
 }
 
 export function requestOnce(options: HttpRequestOptions): Promise<HttpResponse> {
@@ -159,7 +160,13 @@ export function requestOnce(options: HttpRequestOptions): Promise<HttpResponse> 
         }
         settled = true;
         cleanup();
-        reject(new HttpError(0, `Сетевая ошибка: ${event.error || "нет соединения"}`, true));
+        reject(
+          new HttpError(
+            0,
+            t("http.network", { message: event.error || t("http.noConnection") }),
+            true,
+          ),
+        );
       },
       ontimeout: () => {
         if (settled) {
@@ -167,7 +174,7 @@ export function requestOnce(options: HttpRequestOptions): Promise<HttpResponse> 
         }
         settled = true;
         cleanup();
-        reject(new HttpError(0, "Таймаут запроса", true));
+        reject(new HttpError(0, t("http.timeout"), true));
       },
       onabort: () => {
         if (settled) {

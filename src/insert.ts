@@ -1,5 +1,9 @@
 import type { InsertTarget, SelectorStatus } from "./types.js";
 
+const QUESTION_INPUT_CURRENT =
+  '[data-slot="question-option"][data-custom="true"] [data-slot="text-input-v2-input"]';
+const QUESTION_INPUT_LEGACY = 'textarea[data-slot="question-custom-input"]';
+
 export const SELECTORS = {
   composerDock: '[data-component="session-composer-dock"]',
   composerForm: 'form[data-component="composer"]',
@@ -8,9 +12,15 @@ export const SELECTORS = {
   submit: '[data-action="composer-submit"]',
   questionDock: '[data-component="session-question-dock"]',
   questionForm: 'form[data-slot="question-option"][data-custom="true"]',
-  questionInput: 'textarea[data-slot="question-custom-input"]',
   questionFooter: '[data-slot="question-footer-actions"]',
+  questionHeaderActions: '[data-slot="question-header-actions"]',
+  questionCustomOption: '[data-slot="question-option"][data-custom="true"]',
+  questionInputCurrent: QUESTION_INPUT_CURRENT,
+  questionInputLegacy: QUESTION_INPUT_LEGACY,
+  questionInput: `${QUESTION_INPUT_CURRENT}, ${QUESTION_INPUT_LEGACY}`,
 } as const;
+
+export type QuestionInput = HTMLInputElement | HTMLTextAreaElement;
 
 export const LEGACY_SELECTORS = {
   editor: '[data-component="prompt-input"], [data-component="prompt-input-v2"]',
@@ -44,6 +54,8 @@ export function isQuestionPromptOpen(): boolean {
 }
 
 export function getSelectorStatus(): SelectorStatus {
+  const composerMic = document.querySelector('[data-ocvd="composer-mic"]');
+  const questionMic = document.querySelector('[data-ocvd="question-mic"]');
   return {
     composerDock: document.querySelector(SELECTORS.composerDock) !== null,
     composerForm: document.querySelector(SELECTORS.composerForm) !== null,
@@ -51,9 +63,17 @@ export function getSelectorStatus(): SelectorStatus {
     composerActions: document.querySelector(SELECTORS.composerActions) !== null,
     composerActionsResolved: findComposerActions() !== null,
     composerSubmit: document.querySelector(SELECTORS.submit) !== null,
+    composerMic: composerMic !== null,
+    composerMicVisible: isVisibleNode(composerMic),
     questionDock: document.querySelector(SELECTORS.questionDock) !== null,
     questionInput: document.querySelector(SELECTORS.questionInput) !== null,
+    questionInputCurrent: document.querySelector(SELECTORS.questionInputCurrent) !== null,
+    questionInputLegacy: document.querySelector(SELECTORS.questionInputLegacy) !== null,
+    questionHeaderActions: document.querySelector(SELECTORS.questionHeaderActions) !== null,
+    questionCustomOption: document.querySelector(SELECTORS.questionCustomOption) !== null,
     questionFooter: document.querySelector(SELECTORS.questionFooter) !== null,
+    questionMic: questionMic !== null,
+    questionMicVisible: isVisibleNode(questionMic),
   };
 }
 
@@ -154,12 +174,36 @@ function actionRow(
   return parent;
 }
 
-export function findQuestionInput(): HTMLTextAreaElement | null {
-  return document.querySelector<HTMLTextAreaElement>(SELECTORS.questionInput);
+export function findQuestionInput(): QuestionInput | null {
+  const dock = document.querySelector<HTMLElement>(SELECTORS.questionDock);
+  return (
+    dock?.querySelector<QuestionInput>(SELECTORS.questionInput) ??
+    document.querySelector<QuestionInput>(SELECTORS.questionInput)
+  );
 }
 
 export function findQuestionFooter(): HTMLElement | null {
-  return document.querySelector<HTMLElement>(SELECTORS.questionFooter);
+  const dock = document.querySelector<HTMLElement>(SELECTORS.questionDock);
+  return (
+    dock?.querySelector<HTMLElement>(SELECTORS.questionFooter) ??
+    document.querySelector<HTMLElement>(SELECTORS.questionFooter)
+  );
+}
+
+export function findQuestionHeaderActions(): HTMLElement | null {
+  const dock = document.querySelector<HTMLElement>(SELECTORS.questionDock);
+  return (
+    dock?.querySelector<HTMLElement>(SELECTORS.questionHeaderActions) ??
+    document.querySelector<HTMLElement>(SELECTORS.questionHeaderActions)
+  );
+}
+
+export function findQuestionCustomOption(): HTMLElement | null {
+  const dock = document.querySelector<HTMLElement>(SELECTORS.questionDock);
+  return (
+    dock?.querySelector<HTMLElement>(SELECTORS.questionCustomOption) ??
+    document.querySelector<HTMLElement>(SELECTORS.questionCustomOption)
+  );
 }
 
 export function resolveTarget(preferred: InsertTarget): InsertTarget {
@@ -179,7 +223,7 @@ export function resolveTarget(preferred: InsertTarget): InsertTarget {
 export function insertText(text: string, target: InsertTarget = "composer"): boolean {
   const resolved = resolveTarget(target);
   if (resolved === "question") {
-    return insertIntoTextarea(text);
+    return insertIntoQuestionField(text);
   }
   return insertIntoContenteditable(text);
 }
@@ -187,7 +231,7 @@ export function insertText(text: string, target: InsertTarget = "composer"): boo
 export function replaceText(text: string, target: InsertTarget = "composer"): boolean {
   const resolved = resolveTarget(target);
   if (resolved === "question") {
-    return replaceIntoTextarea(text);
+    return replaceIntoQuestionField(text);
   }
   return replaceContentEditable(text);
 }
@@ -220,28 +264,30 @@ export function submitComposer(): boolean {
 }
 
 export function submitQuestion(): boolean {
-  const textarea = findQuestionInput();
-  if (!textarea) {
+  const footer = findQuestionFooter();
+  if (footer) {
+    const button = findLastEnabledButton(footer);
+    if (!button) {
+      return false;
+    }
+    button.click();
+    return true;
+  }
+
+  const field = findQuestionInput();
+  if (!field) {
     return false;
   }
-  textarea.focus();
+  field.focus();
   const event = createEnterEvent();
-  const notCanceled = textarea.dispatchEvent(event);
+  const notCanceled = field.dispatchEvent(event);
   if (!notCanceled) {
     return true;
   }
 
-  const form =
-    textarea.closest<HTMLFormElement>(SELECTORS.questionForm) ?? textarea.closest("form");
+  const form = field.closest<HTMLFormElement>(SELECTORS.questionForm) ?? field.closest("form");
   if (form) {
     form.requestSubmit();
-    return true;
-  }
-
-  const footer = findQuestionFooter();
-  const button = footer ? findSubmitButton(footer) : null;
-  if (button) {
-    button.click();
     return true;
   }
   return false;
@@ -307,34 +353,20 @@ function insertTextFallback(editor: HTMLElement, text: string): boolean {
   return true;
 }
 
-function insertIntoTextarea(text: string): boolean {
-  const textarea = findQuestionInput();
-  if (!textarea) {
+function insertIntoQuestionField(text: string): boolean {
+  const field = findQuestionInput();
+  if (!field) {
     return false;
   }
 
-  const start = textarea.selectionStart ?? textarea.value.length;
-  const end = textarea.selectionEnd ?? textarea.value.length;
-  const newValue = textarea.value.substring(0, start) + text + textarea.value.substring(end);
+  const start = field.selectionStart ?? field.value.length;
+  const end = field.selectionEnd ?? field.value.length;
+  const newValue = field.value.substring(0, start) + text + field.value.substring(end);
 
-  const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
-  if (setter) {
-    setter.call(textarea, newValue);
-  } else {
-    textarea.value = newValue;
-  }
-
-  const caret = start + text.length;
-  textarea.selectionStart = caret;
-  textarea.selectionEnd = caret;
-  textarea.dispatchEvent(
-    new InputEvent("input", {
-      bubbles: true,
-      inputType: "insertText",
-      data: text,
-    }),
-  );
-  textarea.focus();
+  setFieldValue(field, newValue);
+  setCaret(field, start + text.length);
+  dispatchInput(field, text);
+  field.focus();
   return true;
 }
 
@@ -383,28 +415,48 @@ function replaceContentEditable(text: string): boolean {
   return true;
 }
 
-function replaceIntoTextarea(text: string): boolean {
-  const textarea = findQuestionInput();
-  if (!textarea) {
+function replaceIntoQuestionField(text: string): boolean {
+  const field = findQuestionInput();
+  if (!field) {
     return false;
   }
-  const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+  setFieldValue(field, text);
+  setCaret(field, text.length);
+  dispatchInput(field, text);
+  field.focus();
+  return true;
+}
+
+function setFieldValue(field: QuestionInput, value: string): void {
+  const prototype =
+    field instanceof HTMLTextAreaElement
+      ? HTMLTextAreaElement.prototype
+      : HTMLInputElement.prototype;
+  const setter = Object.getOwnPropertyDescriptor(prototype, "value")?.set;
   if (setter) {
-    setter.call(textarea, text);
+    setter.call(field, value);
   } else {
-    textarea.value = text;
+    field.value = value;
   }
-  textarea.selectionStart = text.length;
-  textarea.selectionEnd = text.length;
-  textarea.dispatchEvent(
+}
+
+function setCaret(field: QuestionInput, position: number): void {
+  try {
+    field.setSelectionRange(position, position);
+  } catch {
+    field.selectionStart = position;
+    field.selectionEnd = position;
+  }
+}
+
+function dispatchInput(field: QuestionInput, text: string): void {
+  field.dispatchEvent(
     new InputEvent("input", {
       bubbles: true,
       inputType: "insertText",
       data: text,
     }),
   );
-  textarea.focus();
-  return true;
 }
 
 function placeCaretAtEnd(editor: HTMLElement): void {
@@ -434,18 +486,19 @@ function createEnterEvent(): KeyboardEvent {
   return event;
 }
 
-function findSubmitButton(container: HTMLElement): HTMLButtonElement | null {
-  const submit = container.querySelector<HTMLButtonElement>('button[type="submit"]');
-  if (submit && !submit.disabled) {
-    return submit;
-  }
+function findLastEnabledButton(container: HTMLElement): HTMLButtonElement | null {
   const buttons = [...container.querySelectorAll<HTMLButtonElement>("button")].filter(
-    (button) => !button.disabled && button.getAttribute("aria-disabled") !== "true",
+    (button) => !button.hasAttribute("data-ocvd"),
   );
-  const labeled = buttons.find((button) =>
-    /отправ|submit|send|answer|ответ/i.test(button.textContent ?? ""),
-  );
-  return labeled ?? buttons[buttons.length - 1] ?? null;
+  const last = buttons[buttons.length - 1] ?? null;
+  if (!last || last.disabled || last.getAttribute("aria-disabled") === "true") {
+    return null;
+  }
+  return last;
+}
+
+function isVisibleNode(element: Element | null): boolean {
+  return element instanceof HTMLElement && element.getClientRects().length > 0;
 }
 
 function lastVisible(elements: HTMLElement[]): HTMLElement {

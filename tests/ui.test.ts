@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { setLocale } from "../src/i18n.js";
 import type { RecoveryActions } from "../src/pipeline.js";
 import type { FailedDictation } from "../src/types.js";
 import { type Ui, createUi } from "../src/ui.js";
@@ -49,32 +50,75 @@ function addComposer(options: { withActions?: boolean } = {}): {
   return { dock, editor, actions, submit };
 }
 
-function addQuestion(options: { withFooter?: boolean } = {}): {
-  form: HTMLFormElement;
-  textarea: HTMLTextAreaElement;
+interface QuestionFixture {
+  dock: HTMLElement;
+  option: HTMLElement;
+  field: HTMLInputElement | HTMLTextAreaElement;
   footer: HTMLElement | null;
-} {
+  header: HTMLElement | null;
+}
+
+function addQuestion(
+  options: { legacy?: boolean; withFooter?: boolean; withHeader?: boolean } = {},
+): QuestionFixture {
   const dock = document.createElement("div");
   dock.setAttribute("data-component", "session-question-dock");
-  const form = document.createElement("form");
-  form.setAttribute("data-slot", "question-option");
-  form.setAttribute("data-custom", "true");
-  const textarea = document.createElement("textarea");
-  textarea.setAttribute("data-slot", "question-custom-input");
+  const optionsList = document.createElement("div");
+  optionsList.setAttribute("data-slot", "question-options");
+
+  let option: HTMLElement;
+  let field: HTMLInputElement | HTMLTextAreaElement;
+  if (options.legacy) {
+    const form = document.createElement("form");
+    form.setAttribute("data-slot", "question-option");
+    form.setAttribute("data-custom", "true");
+    const textarea = document.createElement("textarea");
+    textarea.setAttribute("data-slot", "question-custom-input");
+    form.appendChild(textarea);
+    option = form;
+    field = textarea;
+  } else {
+    const div = document.createElement("div");
+    div.setAttribute("data-slot", "question-option");
+    div.setAttribute("data-custom", "true");
+    const toggle = document.createElement("button");
+    toggle.setAttribute("data-slot", "question-custom-toggle");
+    const input = document.createElement("input");
+    input.setAttribute("data-slot", "text-input-v2-input");
+    div.append(toggle, input);
+    option = div;
+    field = input;
+  }
+  optionsList.appendChild(option);
+  dock.appendChild(optionsList);
 
   let footer: HTMLElement | null = null;
   if (options.withFooter !== false) {
+    const wrap = document.createElement("div");
+    wrap.setAttribute("data-slot", "question-footer");
+    const dismiss = document.createElement("button");
+    dismiss.textContent = "Dismiss";
     footer = document.createElement("div");
     footer.setAttribute("data-slot", "question-footer-actions");
+    wrap.append(dismiss, footer);
+    dock.appendChild(wrap);
   }
 
-  form.appendChild(textarea);
-  if (footer) {
-    form.appendChild(footer);
+  let header: HTMLElement | null = null;
+  if (options.withHeader) {
+    const top = document.createElement("div");
+    top.setAttribute("data-slot", "question-header-top");
+    header = document.createElement("div");
+    header.setAttribute("data-slot", "question-header-actions");
+    const collapse = document.createElement("button");
+    collapse.textContent = "Collapse";
+    header.appendChild(collapse);
+    top.appendChild(header);
+    dock.insertBefore(top, optionsList);
   }
-  dock.appendChild(form);
+
   document.body.appendChild(dock);
-  return { form, textarea, footer };
+  return { dock, option, field, footer, header };
 }
 
 function overlay(): ShadowRoot | null {
@@ -292,6 +336,38 @@ describe("composer injection", () => {
     ui.start();
     expect(slot?.querySelectorAll('[data-ocvd="composer-mic"]')).toHaveLength(1);
   });
+
+  it("restores the mic after OpenCode removes only our button", async () => {
+    const { ui } = makeUi();
+    const { actions: slot } = addComposer();
+    ui.start();
+    slot?.querySelector('[data-ocvd="composer-mic"]')?.remove();
+    await vi.waitFor(() => {
+      expect(slot?.querySelector('[data-ocvd="composer-mic"]')).not.toBeNull();
+    });
+  });
+
+  it("updates labels after the interface language changes", () => {
+    const { ui } = makeUi();
+    const { actions: slot } = addComposer();
+    ui.start();
+    const mic = slot?.querySelector<HTMLButtonElement>('[data-ocvd="composer-mic"]');
+    expect(mic?.getAttribute("aria-label")).toBe("Начать голосовую диктовку");
+    setLocale("en");
+    ui.refresh();
+    expect(mic?.getAttribute("aria-label")).toBe("Start voice dictation");
+    expect(mic?.getAttribute("title")).toBe("Start voice dictation");
+  });
+
+  it("ships mobile CSS that shrinks the model title instead of the variant", () => {
+    const { ui } = makeUi();
+    ui.start();
+    const css = document.getElementById("ocvd-page-style")?.textContent ?? "";
+    expect(css).toContain("@media (max-width: 767px)");
+    expect(css).toContain('[data-action="composer-model"]');
+    expect(css).toContain("flex: 1 1 0");
+    expect(css).not.toContain("position: sticky");
+  });
 });
 
 describe("question injection", () => {
@@ -310,25 +386,59 @@ describe("question injection", () => {
     expect(onToggle).toHaveBeenCalledWith("question");
   });
 
-  it("renders a fallback inside the question form", () => {
+  it("renders a fallback inside the custom option when the footer is missing", () => {
     const { ui } = makeUi();
-    const { form } = addQuestion({ withFooter: false });
+    const { option, field } = addQuestion({ withFooter: false });
     ui.start();
-    const fallback = form.querySelector<HTMLElement>('[data-ocvd="question-fallback"]');
+    const fallback = option.querySelector<HTMLElement>('[data-ocvd="question-fallback"]');
     expect(fallback).not.toBeNull();
     expect(fallback?.querySelector('[data-ocvd="question-mic"]')).not.toBeNull();
+    expect(fallback?.previousElementSibling).toBe(field);
+  });
+
+  it("falls back to the header when there is no footer", () => {
+    const { ui } = makeUi();
+    const { header, field } = addQuestion({ withFooter: false, withHeader: true });
+    const collapse = header?.querySelector("button") ?? null;
+    ui.start();
+    const mic = header?.querySelector<HTMLButtonElement>('[data-ocvd="question-mic"]');
+    expect(mic).not.toBeNull();
+    // The mic goes before the last foreign button, same as in the footer.
+    expect([...(header?.children ?? [])]).toEqual([mic, collapse]);
+    expect(field.closest("[data-ocvd]")).toBeNull();
   });
 
   it("removes the fallback when the footer appears", () => {
     const { ui } = makeUi();
-    const { form } = addQuestion({ withFooter: false });
+    const { dock, option } = addQuestion({ withFooter: false });
     ui.start();
     const footer = document.createElement("div");
     footer.setAttribute("data-slot", "question-footer-actions");
-    form.appendChild(footer);
+    dock.appendChild(footer);
     ui.refresh();
-    expect(form.querySelector('[data-ocvd="question-fallback"]')).toBeNull();
+    expect(option.querySelector('[data-ocvd="question-fallback"]')).toBeNull();
     expect(footer.querySelector('[data-ocvd="question-mic"]')).not.toBeNull();
+  });
+
+  it("supports the legacy question form", () => {
+    const { ui } = makeUi();
+    const { option } = addQuestion({ legacy: true, withFooter: false });
+    ui.start();
+    const fallback = option.querySelector<HTMLElement>('[data-ocvd="question-fallback"]');
+    expect(fallback).not.toBeNull();
+    expect(fallback?.querySelector('[data-ocvd="question-mic"]')).not.toBeNull();
+  });
+
+  it("restores the mic after OpenCode removes it from the footer", async () => {
+    const { ui } = makeUi();
+    const { footer } = addQuestion();
+    ui.start();
+    const mic = footer?.querySelector<HTMLButtonElement>('[data-ocvd="question-mic"]');
+    expect(mic).not.toBeNull();
+    mic?.remove();
+    await vi.waitFor(() => {
+      expect(footer?.querySelector('[data-ocvd="question-mic"]')).not.toBeNull();
+    });
   });
 });
 

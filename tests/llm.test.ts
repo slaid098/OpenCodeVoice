@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_CLEANUP_PROMPT, createDefaultConfig } from "../src/config.js";
+import { DEFAULT_CLEANUP_PROMPT_RU, createDefaultConfig } from "../src/config.js";
 import { AbortError, HttpError } from "../src/http.js";
 import {
   LlmError,
@@ -58,7 +58,7 @@ describe("cleanupText with Ollama", () => {
     expect(body.think).toBe(false);
     expect(body.options).toEqual({ temperature: 0.1, num_predict: 2048 });
     expect(body.messages).toEqual([
-      { role: "system", content: DEFAULT_CLEANUP_PROMPT },
+      { role: "system", content: DEFAULT_CLEANUP_PROMPT_RU },
       { role: "user", content: "ну вот сырой текст" },
     ]);
   });
@@ -113,7 +113,7 @@ describe("cleanupText with Ollama", () => {
     );
     expect(result.usedDefaultPrompt).toBe(true);
     const messages = sentBody().messages as Array<{ content: string }>;
-    expect(messages[0]?.content).toBe(DEFAULT_CLEANUP_PROMPT);
+    expect(messages[0]?.content).toBe(DEFAULT_CLEANUP_PROMPT_RU);
   });
 
   it("supports the legacy response field", async () => {

@@ -1,5 +1,6 @@
 import { createAudioRecorder } from "./audio.js";
 import { isFirstRun, loadConfig, registerMenuCommands, saveConfig } from "./config.js";
+import { initI18n, resolveLocale, setLocale, t } from "./i18n.js";
 import {
   insertText,
   isOpencodePage,
@@ -26,6 +27,7 @@ import type { AppConfig, InsertTarget } from "./types.js";
 import { type Ui, createUi } from "./ui.js";
 
 let config: AppConfig | null = null;
+let startupConfig: AppConfig | null = null;
 let initialized = false;
 let ui: Ui | null = null;
 let settings: SettingsPanel | null = null;
@@ -40,9 +42,16 @@ const storageAdapter = {
   requestPersistence,
 };
 
+function getStartupConfig(): AppConfig {
+  if (!startupConfig) {
+    startupConfig = loadConfig(resolveLocale("auto"));
+  }
+  return startupConfig;
+}
+
 function getConfig(): AppConfig {
   if (!config) {
-    config = loadConfig();
+    config = getStartupConfig();
   }
   return config;
 }
@@ -52,7 +61,7 @@ function setup(): void {
     return;
   }
   initialized = true;
-  config = loadConfig();
+  config = getStartupConfig();
 
   settings = createSettingsPanel({
     getConfig,
@@ -63,12 +72,13 @@ function setup(): void {
     getLastRawText: () => pipeline?.getCurrentFailure()?.rawText ?? null,
     onSaved: (next) => {
       config = next;
+      setLocale(resolveLocale(next.ui.language));
       ui?.refresh();
     },
     onClearFailures: async () => {
       await clearFailures();
       await pipeline?.forget();
-      ui?.toast("Сохранённые ошибки очищены.", { durationMs: 2500 });
+      ui?.toast(t("index.failuresCleared"), { durationMs: 2500 });
     },
   });
 
@@ -125,7 +135,10 @@ function setup(): void {
     setTimeout(() => {
       if (!settings?.isOpen()) {
         settings?.open();
-        ui?.toast("Для начала укажите API-ключ STT в настройках.", { durationMs: 5000 });
+        ui?.toast(
+          config?.stt.provider === "custom" ? t("index.firstRunCustom") : t("index.firstRunGroq"),
+          { durationMs: 5000 },
+        );
       }
     }, 700);
   }
@@ -156,11 +169,11 @@ function waitForOpencode(attempt = 0): void {
 }
 
 function toggleAutoSubmit(): void {
-  const current = loadConfig();
+  const current = loadConfig(resolveLocale("auto"));
   current.behavior.autoSubmit = !current.behavior.autoSubmit;
   saveConfig(current);
   config = current;
-  ui?.toast(`Автоотправка ${current.behavior.autoSubmit ? "включена" : "выключена"}.`, {
+  ui?.toast(t(current.behavior.autoSubmit ? "index.autoSubmitOn" : "index.autoSubmitOff"), {
     durationMs: 2500,
   });
 }
@@ -168,7 +181,7 @@ function toggleAutoSubmit(): void {
 async function clearSaved(): Promise<void> {
   await clearFailures();
   await pipeline?.forget();
-  ui?.toast("Сохранённые ошибки очищены.", { durationMs: 2500 });
+  ui?.toast(t("index.failuresCleared"), { durationMs: 2500 });
 }
 
 function registerMenus(): void {
@@ -193,6 +206,8 @@ function isTopFrame(): boolean {
 }
 
 if (isTopFrame()) {
+  config = getStartupConfig();
+  initI18n(config.ui.language);
   registerMenus();
   waitForOpencode();
   window.addEventListener("pageshow", maybeSetup);

@@ -1,16 +1,21 @@
 import { describe, expect, it } from "vitest";
 import {
   CONFIG_KEY,
-  DEFAULT_CLEANUP_PROMPT,
+  DEFAULT_CLEANUP_PROMPT_EN,
+  DEFAULT_CLEANUP_PROMPT_RU,
+  LEGACY_OPENAI_STT,
   LLM_PRESETS,
   STT_PRESETS,
   applyLlmPreset,
   applySttPreset,
   createDefaultConfig,
+  defaultCleanupPrompt,
   getCleanupPrompt,
   isFirstRun,
   loadConfig,
   registerMenuCommands,
+  resolveSttEndpoint,
+  resolveSttModel,
   saveConfig,
   validateConfig,
 } from "../src/config.js";
@@ -40,14 +45,18 @@ describe("defaults and presets", () => {
     const config = createDefaultConfig();
     expect(config).toEqual({
       schemaVersion: 2,
+      ui: {
+        language: "auto",
+      },
       stt: {
         provider: "groq",
-        endpoint: "https://api.groq.com/openai/v1/audio/transcriptions",
         apiKey: "",
-        model: "whisper-large-v3-turbo",
         language: "",
         prompt: "",
         temperature: 0,
+        groqModel: "whisper-large-v3-turbo",
+        customEndpoint: "",
+        customModel: "",
       },
       llm: {
         enabled: true,
@@ -56,7 +65,7 @@ describe("defaults and presets", () => {
         apiKey: "",
         model: "deepseek-v4.1-flash",
         reasoning: false,
-        prompt: DEFAULT_CLEANUP_PROMPT,
+        prompt: DEFAULT_CLEANUP_PROMPT_RU,
       },
       behavior: {
         autoSubmit: true,
@@ -73,6 +82,13 @@ describe("defaults and presets", () => {
     });
   });
 
+  it("uses the requested locale for the default cleanup prompt", () => {
+    expect(createDefaultConfig("en").llm.prompt).toBe(DEFAULT_CLEANUP_PROMPT_EN);
+    expect(createDefaultConfig("ru").llm.prompt).toBe(DEFAULT_CLEANUP_PROMPT_RU);
+    expect(defaultCleanupPrompt("en")).toBe(DEFAULT_CLEANUP_PROMPT_EN);
+    expect(defaultCleanupPrompt("ru")).toBe(DEFAULT_CLEANUP_PROMPT_RU);
+  });
+
   it("returns independent objects", () => {
     const first = createDefaultConfig();
     const second = createDefaultConfig();
@@ -84,17 +100,29 @@ describe("defaults and presets", () => {
   });
 
   it("ships a Russian cleanup prompt with all eight rules", () => {
-    expect(DEFAULT_CLEANUP_PROMPT).toContain("редактор русской расшифровки");
+    expect(DEFAULT_CLEANUP_PROMPT_RU).toContain("редактор русской расшифровки");
     for (let rule = 1; rule <= 8; rule += 1) {
-      expect(DEFAULT_CLEANUP_PROMPT).toContain(`${rule}.`);
+      expect(DEFAULT_CLEANUP_PROMPT_RU).toContain(`${rule}.`);
     }
-    expect(DEFAULT_CLEANUP_PROMPT).toContain("Не переводи текст");
+    expect(DEFAULT_CLEANUP_PROMPT_RU).toContain("Не переводи текст");
+  });
+
+  it("ships an English cleanup prompt", () => {
+    expect(DEFAULT_CLEANUP_PROMPT_EN).toContain("voice dictation transcript");
+    for (let rule = 1; rule <= 7; rule += 1) {
+      expect(DEFAULT_CLEANUP_PROMPT_EN).toContain(`${rule}.`);
+    }
+    expect(DEFAULT_CLEANUP_PROMPT_EN).not.toMatch(/[А-Яа-яЁё]/);
   });
 
   it("defines STT and LLM presets", () => {
     expect(STT_PRESETS.groq.model).toBe("whisper-large-v3-turbo");
-    expect(STT_PRESETS.openai.model).toBe("whisper-1");
     expect(STT_PRESETS.custom).toEqual({ endpoint: "", model: "" });
+    expect(Object.keys(STT_PRESETS)).toEqual(["groq", "custom"]);
+    expect(LEGACY_OPENAI_STT).toEqual({
+      endpoint: "https://api.openai.com/v1/audio/transcriptions",
+      model: "whisper-1",
+    });
     expect(LLM_PRESETS["ollama-cloud"]).toEqual({
       baseUrl: "https://ollama.com",
       model: "deepseek-v4.1-flash",
@@ -159,9 +187,11 @@ describe("loadConfig", () => {
     );
 
     const config = loadConfig();
-    expect(config.stt.provider).toBe("openai");
+    // A legacy OpenAI config becomes Custom URL with its endpoint preserved.
+    expect(config.stt.provider).toBe("custom");
+    expect(config.stt.customEndpoint).toBe(LEGACY_OPENAI_STT.endpoint);
+    expect(config.stt.customModel).toBe(LEGACY_OPENAI_STT.model);
     expect(config.stt.apiKey).toBe("");
-    expect(config.stt.model).toBe("");
     expect(config.stt.temperature).toBe(1);
     expect(config.llm.provider).toBe("ollama-cloud");
     expect(config.llm.enabled).toBe(true);
@@ -201,6 +231,18 @@ describe("loadConfig", () => {
   });
 });
 
+describe("UI language", () => {
+  it.each(["auto", "ru", "en"] as const)("keeps the %s preference", (language) => {
+    GM_setValue(CONFIG_KEY, JSON.stringify({ ui: { language } }));
+    expect(loadConfig().ui.language).toBe(language);
+  });
+
+  it.each([undefined, null, 42, "de", "RU"])("falls back to auto for %j", (language) => {
+    GM_setValue(CONFIG_KEY, JSON.stringify({ ui: { language } }));
+    expect(loadConfig().ui.language).toBe("auto");
+  });
+});
+
 describe("legacy migration", () => {
   it("migrates the old flat Groq settings", () => {
     GM_setValue("groqApiKey", "gsk_legacy");
@@ -213,9 +255,10 @@ describe("legacy migration", () => {
     const config = loadConfig();
     expect(config.stt).toMatchObject({
       provider: "groq",
-      endpoint: STT_PRESETS.groq.endpoint,
       apiKey: "gsk_legacy",
-      model: "whisper-large-v3",
+      groqModel: "whisper-large-v3",
+      customEndpoint: "",
+      customModel: "",
       language: "ru",
       prompt: "OpenCode",
       temperature: 0.4,
@@ -224,19 +267,19 @@ describe("legacy migration", () => {
     expect(storedConfig().stt.apiKey).toBe("gsk_legacy");
   });
 
-  it("detects the OpenAI provider from the legacy endpoint", () => {
-    GM_setValue("endpoint", "https://api.openai.com/v1/audio/transcriptions");
+  it("turns the legacy OpenAI endpoint into Custom URL", () => {
+    GM_setValue("endpoint", LEGACY_OPENAI_STT.endpoint);
     const config = loadConfig();
-    expect(config.stt.provider).toBe("openai");
-    expect(config.stt.endpoint).toBe("https://api.openai.com/v1/audio/transcriptions");
-    expect(config.stt.model).toBe("whisper-1");
+    expect(config.stt.provider).toBe("custom");
+    expect(config.stt.customEndpoint).toBe(LEGACY_OPENAI_STT.endpoint);
+    expect(config.stt.customModel).toBe(LEGACY_OPENAI_STT.model);
   });
 
   it("treats an unknown endpoint as a custom provider", () => {
     GM_setValue("endpoint", "https://proxy.example.com/v1/audio/transcriptions");
     const config = loadConfig();
     expect(config.stt.provider).toBe("custom");
-    expect(config.stt.endpoint).toBe("https://proxy.example.com/v1/audio/transcriptions");
+    expect(config.stt.customEndpoint).toBe("https://proxy.example.com/v1/audio/transcriptions");
   });
 
   it("keeps a custom legacy model and endpoint", () => {
@@ -245,8 +288,8 @@ describe("legacy migration", () => {
     GM_setValue("endpoint", "https://proxy.example.com/transcribe");
     const config = loadConfig();
     expect(config.stt.provider).toBe("custom");
-    expect(config.stt.model).toBe("my-whisper");
-    expect(config.stt.endpoint).toBe("https://proxy.example.com/transcribe");
+    expect(config.stt.customModel).toBe("my-whisper");
+    expect(config.stt.customEndpoint).toBe("https://proxy.example.com/transcribe");
   });
 
   it("clamps legacy values and ignores bad types", () => {
@@ -273,6 +316,86 @@ describe("legacy migration", () => {
   });
 });
 
+describe("stored v2 migration", () => {
+  it("preserves a non-standard endpoint stored under provider groq", () => {
+    GM_setValue(
+      CONFIG_KEY,
+      JSON.stringify({
+        stt: {
+          provider: "groq",
+          endpoint: "https://my-proxy.example.com/v1/audio/transcriptions",
+          model: "my-whisper",
+          apiKey: "key",
+        },
+      }),
+    );
+    const config = loadConfig();
+    expect(config.stt.provider).toBe("custom");
+    expect(config.stt.customEndpoint).toBe("https://my-proxy.example.com/v1/audio/transcriptions");
+    expect(config.stt.customModel).toBe("my-whisper");
+    expect(config.stt.groqModel).toBe(STT_PRESETS.groq.model);
+  });
+
+  it("keeps a standard Groq endpoint as groq", () => {
+    GM_setValue(
+      CONFIG_KEY,
+      JSON.stringify({
+        stt: {
+          provider: "groq",
+          endpoint: STT_PRESETS.groq.endpoint,
+          model: "whisper-large-v3",
+        },
+      }),
+    );
+    const config = loadConfig();
+    expect(config.stt.provider).toBe("groq");
+    expect(config.stt.groqModel).toBe("whisper-large-v3");
+    expect(config.stt.customEndpoint).toBe("");
+  });
+
+  it("keeps legacy openai provider as custom even without endpoint", () => {
+    GM_setValue(CONFIG_KEY, JSON.stringify({ stt: { provider: "openai" } }));
+    const config = loadConfig();
+    expect(config.stt.provider).toBe("custom");
+    expect(config.stt.customEndpoint).toBe(LEGACY_OPENAI_STT.endpoint);
+    expect(config.stt.customModel).toBe(LEGACY_OPENAI_STT.model);
+  });
+
+  it("keeps custom fields saved under provider groq", () => {
+    GM_setValue(
+      CONFIG_KEY,
+      JSON.stringify({
+        stt: {
+          provider: "groq",
+          groqModel: "whisper-large-v3",
+          customEndpoint: "https://proxy.example.com/transcribe",
+          customModel: "my-model",
+        },
+      }),
+    );
+    const config = loadConfig();
+    expect(config.stt.provider).toBe("groq");
+    expect(config.stt.groqModel).toBe("whisper-large-v3");
+    expect(config.stt.customEndpoint).toBe("https://proxy.example.com/transcribe");
+    expect(config.stt.customModel).toBe("my-model");
+  });
+
+  it("infers custom when provider is missing but an endpoint is set", () => {
+    GM_setValue(
+      CONFIG_KEY,
+      JSON.stringify({ stt: { customEndpoint: "https://proxy.example.com/transcribe" } }),
+    );
+    expect(loadConfig().stt.provider).toBe("custom");
+  });
+
+  it("falls back to groq when neither provider nor endpoint is set", () => {
+    GM_setValue(CONFIG_KEY, JSON.stringify({ stt: { groqModel: "" } }));
+    const config = loadConfig();
+    expect(config.stt.provider).toBe("groq");
+    expect(config.stt.groqModel).toBe(STT_PRESETS.groq.model);
+  });
+});
+
 describe("saveConfig", () => {
   it("stores a single JSON value", () => {
     const config = validConfig();
@@ -285,13 +408,25 @@ describe("saveConfig", () => {
     const config = validConfig();
     config.stt.language = "en";
     config.behavior.autoSubmitQuestion = true;
+    config.ui.language = "en";
     saveConfig(config);
     expect(loadConfig()).toEqual(config);
+  });
+
+  it("round-trips saved custom fields while provider is groq", () => {
+    const config = validConfig();
+    config.stt.customEndpoint = "https://proxy.example.com/transcribe";
+    config.stt.customModel = "my-model";
+    saveConfig(config);
+    const loaded = loadConfig();
+    expect(loaded.stt.provider).toBe("groq");
+    expect(loaded.stt.customEndpoint).toBe("https://proxy.example.com/transcribe");
+    expect(loaded.stt.customModel).toBe("my-model");
   });
 });
 
 describe("isFirstRun", () => {
-  it("is true without an STT key for a hosted provider", () => {
+  it("is true without an STT key for the Groq provider", () => {
     expect(isFirstRun()).toBe(true);
     expect(isFirstRun(createDefaultConfig())).toBe(true);
   });
@@ -302,10 +437,21 @@ describe("isFirstRun", () => {
     expect(isFirstRun(config)).toBe(false);
   });
 
-  it("is false for a custom endpoint without a key", () => {
+  it("is false for a complete custom endpoint without a key", () => {
     const config = createDefaultConfig();
     config.stt.provider = "custom";
-    config.stt.endpoint = "https://proxy.example.com/transcribe";
+    config.stt.customEndpoint = "https://proxy.example.com/transcribe";
+    config.stt.customModel = "my-model";
+    expect(isFirstRun(config)).toBe(false);
+  });
+
+  it("is true for custom without an endpoint or model", () => {
+    const config = createDefaultConfig();
+    config.stt.provider = "custom";
+    expect(isFirstRun(config)).toBe(true);
+    config.stt.customEndpoint = "https://proxy.example.com/transcribe";
+    expect(isFirstRun(config)).toBe(true);
+    config.stt.customModel = "my-model";
     expect(isFirstRun(config)).toBe(false);
   });
 
@@ -326,31 +472,57 @@ describe("getCleanupPrompt", () => {
   it("falls back to the default for blank prompts", () => {
     const config = createDefaultConfig();
     config.llm.prompt = "   \n ";
-    expect(getCleanupPrompt(config)).toBe(DEFAULT_CLEANUP_PROMPT);
+    expect(getCleanupPrompt(config)).toBe(DEFAULT_CLEANUP_PROMPT_RU);
   });
 });
 
-describe("provider presets", () => {
-  it("applies STT presets without mutating the input", () => {
+describe("STT resolution and presets", () => {
+  it("resolves the built-in Groq endpoint and model", () => {
     const config = createDefaultConfig();
-    const openai = applySttPreset(config.stt, "openai");
-    expect(openai.endpoint).toBe(STT_PRESETS.openai.endpoint);
-    expect(openai.model).toBe("whisper-1");
-    expect(config.stt.model).toBe("whisper-large-v3-turbo");
-
-    const groq = applySttPreset(openai, "groq");
-    expect(groq.endpoint).toBe(STT_PRESETS.groq.endpoint);
-    expect(groq.model).toBe("whisper-large-v3-turbo");
+    expect(resolveSttEndpoint(config.stt)).toBe(STT_PRESETS.groq.endpoint);
+    expect(resolveSttModel(config.stt)).toBe(STT_PRESETS.groq.model);
   });
 
-  it("keeps the endpoint and model when switching to custom STT", () => {
+  it("falls back to the default Groq model for a blank one", () => {
     const config = createDefaultConfig();
-    config.stt.endpoint = "https://proxy.example.com/transcribe";
-    config.stt.model = "my-model";
+    config.stt.groqModel = "  ";
+    expect(resolveSttModel(config.stt)).toBe(STT_PRESETS.groq.model);
+  });
+
+  it("resolves the custom endpoint and model", () => {
+    const config = createDefaultConfig();
+    config.stt.provider = "custom";
+    config.stt.customEndpoint = " https://proxy.example.com/transcribe ";
+    config.stt.customModel = " my-model ";
+    expect(resolveSttEndpoint(config.stt)).toBe("https://proxy.example.com/transcribe");
+    expect(resolveSttModel(config.stt)).toBe("my-model");
+  });
+
+  it("applies STT presets without mutating the input", () => {
+    const config = createDefaultConfig();
+    config.stt.apiKey = "key";
     const custom = applySttPreset(config.stt, "custom");
     expect(custom.provider).toBe("custom");
-    expect(custom.endpoint).toBe("https://proxy.example.com/transcribe");
-    expect(custom.model).toBe("my-model");
+    expect(config.stt.provider).toBe("groq");
+
+    const groq = applySttPreset(custom, "groq");
+    expect(groq.provider).toBe("groq");
+    expect(groq.groqModel).toBe(STT_PRESETS.groq.model);
+  });
+
+  it("keeps custom endpoint and model when switching to Groq and back", () => {
+    const config = createDefaultConfig();
+    config.stt.customEndpoint = "https://proxy.example.com/transcribe";
+    config.stt.customModel = "my-model";
+
+    const custom = applySttPreset(config.stt, "custom");
+    const groq = applySttPreset(custom, "groq");
+    expect(groq.customEndpoint).toBe("https://proxy.example.com/transcribe");
+    expect(groq.customModel).toBe("my-model");
+
+    const back = applySttPreset(groq, "custom");
+    expect(back.customEndpoint).toBe("https://proxy.example.com/transcribe");
+    expect(back.customModel).toBe("my-model");
   });
 
   it("applies LLM presets", () => {
@@ -399,7 +571,8 @@ describe("validateConfig", () => {
     const config = validConfig();
     config.stt.provider = "custom";
     config.stt.apiKey = "";
-    config.stt.endpoint = "https://proxy.example.com/transcribe";
+    config.stt.customEndpoint = "https://proxy.example.com/transcribe";
+    config.stt.customModel = "my-model";
     expect(validateConfig(config)).toEqual([]);
   });
 
@@ -417,21 +590,31 @@ describe("validateConfig", () => {
   });
 
   it.each(["", "not a url", "ftp://example.com/file"])(
-    "rejects the STT endpoint %j",
+    "rejects the custom STT endpoint %j",
     (endpoint) => {
       const config = validConfig();
-      config.stt.endpoint = endpoint;
+      config.stt.provider = "custom";
+      config.stt.customModel = "my-model";
+      config.stt.customEndpoint = endpoint;
       expect(validateConfig(config)).toContain("STT endpoint должен быть корректным http(s) URL");
     },
   );
 
-  it("requires an STT model", () => {
+  it("requires a Groq STT model", () => {
     const config = validConfig();
-    config.stt.model = "  ";
+    config.stt.groqModel = "  ";
     expect(validateConfig(config)).toContain("Укажите модель STT");
   });
 
-  it("requires an STT key for hosted providers", () => {
+  it("requires a custom STT model", () => {
+    const config = validConfig();
+    config.stt.provider = "custom";
+    config.stt.customEndpoint = "https://proxy.example.com/transcribe";
+    config.stt.customModel = "  ";
+    expect(validateConfig(config)).toContain("Укажите модель STT");
+  });
+
+  it("requires an STT key for the Groq provider", () => {
     const config = validConfig();
     config.stt.apiKey = " ";
     expect(validateConfig(config)).toContain("Укажите API-ключ STT");
@@ -487,17 +670,27 @@ describe("validateConfig", () => {
   it("collects every error at once", () => {
     const config = createDefaultConfig();
     config.stt.provider = "nope" as unknown as SttProviderId;
-    config.stt.endpoint = "x";
-    config.stt.model = "";
+    config.stt.groqModel = "";
     config.llm.provider = "nope" as unknown as LlmProviderId;
     config.llm.baseUrl = "x";
     config.llm.model = "";
     config.behavior.maxRecordingSeconds = 1;
     config.retry.maxAttempts = 0;
     const errors = validateConfig(config);
-    expect(errors.length).toBeGreaterThanOrEqual(9);
+    expect(errors.length).toBeGreaterThanOrEqual(8);
     expect(errors).toContain("Укажите API-ключ STT");
     expect(errors).toContain("Неизвестный LLM-провайдер");
+  });
+
+  it("returns localized messages for English", () => {
+    const config = validConfig();
+    config.stt.provider = "custom";
+    config.stt.customEndpoint = "not a url";
+    config.stt.customModel = "";
+    const errors = validateConfig(config, "en");
+    expect(errors).toContain("The STT endpoint must be a valid http(s) URL");
+    expect(errors).toContain("Specify the STT model");
+    expect(errors.every((message) => !/[А-Яа-яЁё]/.test(message))).toBe(true);
   });
 });
 

@@ -21,6 +21,9 @@ last_updated: 2026-10-20
 - `0009-llm-cleanup-editable-prompt.md` — очистка LLM, редактируемый промпт, reasoning off, fallback
 - `0010-config-v2-retry-and-recovery.md` — конфиг v2, retry-политика, IndexedDB и восстановление
 
+## ADR 0.9.0
+- `0011-i18n-stt-mobile.md` — i18n RU/EN, STT `groq`/`custom`, 403-классификация, мобильный truncate, вопросный микрофон, heartbeat и осознанный downgrade до 0.9.0
+
 ## Patterns
 - Один handoff на PR, slug = тема PR.
 - ADR нумеруются с 0001; имя `<NNNN>-<slug>.md` (у ранних ADR сохранён `-pr-<N>-` в имени).

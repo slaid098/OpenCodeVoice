@@ -1,5 +1,7 @@
 import type { AudioRecorder, RecordedAudio } from "./audio.js";
+import { resolveSttModel } from "./config.js";
 import { isAbortError } from "./http.js";
+import { type MessageKey, t } from "./i18n.js";
 import type { CleanupOptions } from "./llm.js";
 import type { TranscribeOptions } from "./transcribe.js";
 import type {
@@ -116,7 +118,7 @@ export function createPipeline(deps: PipelineDeps): Pipeline {
     try {
       await deps.store.save(record);
     } catch {
-      deps.ui.toast("Не удалось сохранить черновик: хранилище недоступно.", {
+      deps.ui.toast(t("pipeline.draftSaveFailed"), {
         error: true,
         durationMs: 6000,
       });
@@ -137,7 +139,12 @@ export function createPipeline(deps: PipelineDeps): Pipeline {
     return (_error, attempt, delayMs) => {
       const max = deps.getConfig().retry.maxAttempts;
       deps.ui.toast(
-        `Повтор ${label} (${attempt + 1}/${max}) через ${Math.round(delayMs / 100) / 10} с…`,
+        t("pipeline.retryIn", {
+          label,
+          attempt: attempt + 1,
+          max,
+          seconds: Math.round(delayMs / 100) / 10,
+        }),
         {
           durationMs: Math.min(2500, delayMs),
         },
@@ -162,10 +169,10 @@ export function createPipeline(deps: PipelineDeps): Pipeline {
       }
       recorder = null;
       setPhase("idle");
-      const message = error instanceof Error ? error.message : "Не удалось начать запись.";
+      const message = error instanceof Error ? error.message : t("pipeline.recordStartFailed");
       deps.ui.toast(message, {
         error: true,
-        actionLabel: "Повторить",
+        actionLabel: t("pipeline.retry"),
         action: () => void start(nextTarget),
         durationMs: 8000,
       });
@@ -192,7 +199,7 @@ export function createPipeline(deps: PipelineDeps): Pipeline {
     const maxSeconds = deps.getConfig().behavior.maxRecordingSeconds;
     limitTimer = setTimeout(() => {
       if (phase === "recording") {
-        deps.ui.toast(`Достигнут лимит записи (${maxSeconds} с).`, { durationMs: 3000 });
+        deps.ui.toast(t("pipeline.recordLimit", { seconds: maxSeconds }), { durationMs: 3000 });
         void stop();
       }
     }, maxSeconds * 1000);
@@ -216,10 +223,10 @@ export function createPipeline(deps: PipelineDeps): Pipeline {
         return;
       }
       setPhase("idle");
-      const message = error instanceof Error ? error.message : "Не удалось остановить запись.";
+      const message = error instanceof Error ? error.message : t("pipeline.recordStopFailed");
       deps.ui.toast(message, {
         error: true,
-        actionLabel: "Записать снова",
+        actionLabel: t("pipeline.recordAgain"),
         action: () => void start(target),
         durationMs: 8000,
       });
@@ -239,7 +246,7 @@ export function createPipeline(deps: PipelineDeps): Pipeline {
       error: "",
       attempts: 0,
       provider: config.stt.provider,
-      model: config.stt.model,
+      model: resolveSttModel(config.stt),
     };
 
     if (config.behavior.saveFailedAudio) {
@@ -268,7 +275,7 @@ export function createPipeline(deps: PipelineDeps): Pipeline {
     try {
       const result = await deps.transcribe(blob, deps.getConfig(), {
         signal: abort.signal,
-        onRetry: retryToast("STT"),
+        onRetry: retryToast(t("pipeline.retryLabel.stt")),
       });
       if (localToken !== token) {
         return;
@@ -289,14 +296,8 @@ export function createPipeline(deps: PipelineDeps): Pipeline {
       if (localToken !== token || isAbortError(error)) {
         return;
       }
-      const message = error instanceof Error ? error.message : "Ошибка распознавания.";
-      await fail(
-        record,
-        "stt",
-        message,
-        localToken,
-        "Не удалось распознать речь. Аудио сохранено — можно повторить.",
-      );
+      const message = error instanceof Error ? error.message : t("pipeline.sttFailedGeneric");
+      await fail(record, "stt", message, localToken, t("pipeline.sttFailedSaved"));
     }
   };
 
@@ -312,13 +313,13 @@ export function createPipeline(deps: PipelineDeps): Pipeline {
     try {
       const result = await deps.cleanup(record.rawText ?? "", config, {
         signal: abort.signal,
-        onRetry: retryToast("очистки"),
+        onRetry: retryToast(t("pipeline.retryLabel.llm")),
       });
       if (localToken !== token) {
         return;
       }
       if (result.usedDefaultPrompt) {
-        deps.ui.toast("Промпт очистки пуст — использован стандартный.", { durationMs: 4000 });
+        deps.ui.toast(t("pipeline.promptEmpty"), { durationMs: 4000 });
       }
       record.cleanText = result.text;
       record.stage = "insert";
@@ -336,7 +337,7 @@ export function createPipeline(deps: PipelineDeps): Pipeline {
       if (localToken !== token || isAbortError(error)) {
         return;
       }
-      const message = error instanceof Error ? error.message : "Ошибка очистки текста.";
+      const message = error instanceof Error ? error.message : t("pipeline.cleanupFailedGeneric");
       record.stage = "llm";
       record.error = message;
       record.attempts += 1;
@@ -360,13 +361,11 @@ export function createPipeline(deps: PipelineDeps): Pipeline {
       setPhase("idle");
       showRecovery(record);
       deps.ui.toast(
-        insertedRaw
-          ? "Очистка не удалась — вставлен сырой текст. Проверьте и отправьте или повторите очистку."
-          : `Очистка не удалась: ${message}`,
+        insertedRaw ? t("pipeline.cleanupFailedRaw") : t("pipeline.cleanupFailed", { message }),
         {
           error: true,
           durationMs: 10_000,
-          actionLabel: insertedRaw ? "Отправить как есть" : "Повторить очистку",
+          actionLabel: insertedRaw ? t("pipeline.submitRaw") : t("pipeline.retryCleanup"),
           action: insertedRaw ? () => void submitRaw(record) : () => void retryLast(),
         },
       );
@@ -380,9 +379,9 @@ export function createPipeline(deps: PipelineDeps): Pipeline {
       await fail(
         record,
         "insert",
-        "Нет текста для вставки.",
+        t("pipeline.noText"),
         localToken,
-        "Нет текста для вставки. Запишите диктовку заново.",
+        t("pipeline.noTextRecordAgain"),
       );
       return;
     }
@@ -397,9 +396,9 @@ export function createPipeline(deps: PipelineDeps): Pipeline {
       await fail(
         record,
         "insert",
-        "Не удалось найти поле ввода.",
+        t("pipeline.insertFailed"),
         localToken,
-        "Не удалось найти поле ввода. Текст сохранён — можно повторить.",
+        t("pipeline.insertFailedSaved"),
       );
       return;
     }
@@ -421,7 +420,7 @@ export function createPipeline(deps: PipelineDeps): Pipeline {
         ? config.behavior.autoSubmit
         : config.behavior.autoSubmitQuestion;
     if (!autoSubmit) {
-      await finishSuccess(record, "Текст вставлен.");
+      await finishSuccess(record, t("pipeline.inserted"));
       return;
     }
     await runSubmit(record, localToken);
@@ -434,15 +433,15 @@ export function createPipeline(deps: PipelineDeps): Pipeline {
       return;
     }
     if (submitted) {
-      await finishSuccess(record, "Отправлено.");
+      await finishSuccess(record, t("pipeline.sent"));
       return;
     }
     await fail(
       record,
       "submit",
-      "Не удалось отправить сообщение.",
+      t("pipeline.submitFailed"),
       localToken,
-      "Не удалось отправить. Текст остался в поле ввода — можно повторить.",
+      t("pipeline.submitFailedSaved"),
     );
   };
 
@@ -491,11 +490,11 @@ export function createPipeline(deps: PipelineDeps): Pipeline {
 
   const insertRaw = async (record: FailedDictation): Promise<void> => {
     if (phase !== "idle") {
-      deps.ui.toast("Дождитесь завершения текущей операции.", { durationMs: 2500 });
+      deps.ui.toast(t("pipeline.waitCurrent"), { durationMs: 2500 });
       return;
     }
     if (!record.rawText) {
-      deps.ui.toast("Сырой текст не сохранён.", { error: true });
+      deps.ui.toast(t("pipeline.rawNotSaved"), { error: true });
       return;
     }
     const localToken = ++token;
@@ -506,7 +505,7 @@ export function createPipeline(deps: PipelineDeps): Pipeline {
       return;
     }
     if (!inserted) {
-      deps.ui.toast("Не удалось найти поле ввода.", { error: true });
+      deps.ui.toast(t("pipeline.insertFailed"), { error: true });
       return;
     }
     record.rawInserted = true;
@@ -519,16 +518,16 @@ export function createPipeline(deps: PipelineDeps): Pipeline {
       return;
     }
     showRecovery(record);
-    deps.ui.toast("Сырой текст вставлен. Можно отправить или повторить очистку.", {
+    deps.ui.toast(t("pipeline.rawInserted"), {
       durationMs: 4000,
-      actionLabel: "Отправить как есть",
+      actionLabel: t("pipeline.submitRaw"),
       action: () => void submitRaw(record),
     });
   };
 
   const submitRaw = async (record: FailedDictation): Promise<void> => {
     if (phase !== "idle") {
-      deps.ui.toast("Дождитесь завершения текущей операции.", { durationMs: 2500 });
+      deps.ui.toast(t("pipeline.waitCurrent"), { durationMs: 2500 });
       return;
     }
     const localToken = ++token;
@@ -545,12 +544,12 @@ export function createPipeline(deps: PipelineDeps): Pipeline {
 
   const retryLast = async (): Promise<void> => {
     if (phase !== "idle") {
-      deps.ui.toast("Дождитесь завершения текущей операции.", { durationMs: 2500 });
+      deps.ui.toast(t("pipeline.waitCurrent"), { durationMs: 2500 });
       return;
     }
     const record = current ?? (await deps.store.latest());
     if (!record) {
-      deps.ui.toast("Нет сохранённых диктовок для повтора.", { durationMs: 3000 });
+      deps.ui.toast(t("pipeline.noSavedDictations"), { durationMs: 3000 });
       return;
     }
     current = record;
@@ -560,7 +559,7 @@ export function createPipeline(deps: PipelineDeps): Pipeline {
       case "stt": {
         const blob = deps.store.fromAudio(record);
         if (!blob) {
-          deps.ui.toast("Аудио не сохранилось. Запишите диктовку заново.", {
+          deps.ui.toast(t("pipeline.audioNotSaved"), {
             error: true,
             durationMs: 6000,
           });
@@ -587,7 +586,7 @@ export function createPipeline(deps: PipelineDeps): Pipeline {
     }
     current = null;
     deps.ui.hideRecovery();
-    deps.ui.toast("Сохранённая запись удалена.", { durationMs: 2200 });
+    deps.ui.toast(t("pipeline.savedDeleted"), { durationMs: 2200 });
   };
 
   const cancel = async (): Promise<void> => {
@@ -608,7 +607,7 @@ export function createPipeline(deps: PipelineDeps): Pipeline {
     }
     deps.ui.hideRecovery();
     setPhase("idle");
-    deps.ui.toast("Отменено.", { durationMs: 1500 });
+    deps.ui.toast(t("pipeline.cancelled"), { durationMs: 1500 });
   };
 
   const toggle = async (nextTarget: InsertTarget): Promise<void> => {
@@ -620,7 +619,7 @@ export function createPipeline(deps: PipelineDeps): Pipeline {
       await stop();
       return;
     }
-    deps.ui.toast("Дождитесь завершения обработки.", { durationMs: 2500 });
+    deps.ui.toast(t("pipeline.waitProcessing"), { durationMs: 2500 });
   };
 
   const forget = async (): Promise<void> => {
@@ -664,30 +663,29 @@ export function createPipeline(deps: PipelineDeps): Pipeline {
   };
 }
 
+const RETRY_KEY: Record<FailureStage, MessageKey> = {
+  stt: "ui.retry.stt",
+  llm: "ui.retry.llm",
+  insert: "ui.retry.insert",
+  submit: "ui.retry.submit",
+};
+
 function retryLabel(stage: FailureStage): string {
-  switch (stage) {
-    case "stt":
-      return "Повторить STT";
-    case "llm":
-      return "Повторить очистку";
-    case "insert":
-      return "Повторить вставку";
-    case "submit":
-      return "Отправить снова";
-  }
+  return t(RETRY_KEY[stage]);
 }
 
 function cleanupFallbackMessage(reason: string | undefined): string {
   switch (reason) {
     case "refusal":
-      return "LLM отказался обрабатывать текст — использован сырой текст.";
+      return t("pipeline.cleanupReason.refusal");
     case "too-long":
-      return "LLM вернул слишком длинный текст — использован сырой.";
+      return t("pipeline.cleanupReason.tooLong");
+    case "empty":
     case "empty-result":
-      return "LLM вернул пустой текст — использован сырой.";
+      return t("pipeline.cleanupReason.empty");
     case "empty-prompt":
-      return "Промпт очистки пуст — использован стандартный.";
+      return t("pipeline.cleanupReason.emptyPrompt");
     default:
-      return "LLM не смог очистить текст — использован сырой.";
+      return t("pipeline.cleanupReason.unknown");
   }
 }
