@@ -389,6 +389,51 @@ describe("question injection", () => {
     expect(onToggle).toHaveBeenCalledWith("question");
   });
 
+  it("prefers the always-visible header over the footer", () => {
+    const { ui } = makeUi();
+    const { header, footer } = addQuestion({ withHeader: true });
+    ui.start();
+
+    const mic = header?.querySelector<HTMLButtonElement>('[data-ocvd="question-mic"]');
+    expect(mic).not.toBeNull();
+    expect(footer?.querySelector('[data-ocvd="question-mic"]')).toBeNull();
+    expect(document.querySelectorAll('[data-ocvd="question-mic"]').length).toBe(1);
+  });
+
+  it("ignores a stale hidden question dock", () => {
+    const { ui } = makeUi();
+    const hidden = addQuestion({ withHeader: true });
+    Object.defineProperty(hidden.dock, "getClientRects", { value: () => [] });
+    const visible = addQuestion({ withHeader: true });
+    ui.start();
+
+    expect(hidden.dock.querySelector('[data-ocvd="question-mic"]')).toBeNull();
+    expect(visible.header?.querySelector('[data-ocvd="question-mic"]')).not.toBeNull();
+    expect(document.querySelectorAll('[data-ocvd="question-mic"]').length).toBe(1);
+  });
+
+  it("moves the mic to the header when a header appears", () => {
+    const { ui } = makeUi();
+    const { dock, footer } = addQuestion();
+    ui.start();
+    expect(footer?.querySelector('[data-ocvd="question-mic"]')).not.toBeNull();
+
+    const top = document.createElement("div");
+    top.setAttribute("data-slot", "question-header-top");
+    const header = document.createElement("div");
+    header.setAttribute("data-slot", "question-header-actions");
+    const collapse = document.createElement("button");
+    collapse.textContent = "Collapse";
+    header.appendChild(collapse);
+    top.appendChild(header);
+    dock.insertBefore(top, dock.firstChild);
+    ui.refresh();
+
+    expect(footer?.querySelector('[data-ocvd="question-mic"]')).toBeNull();
+    expect(header.querySelector('[data-ocvd="question-mic"]')).not.toBeNull();
+    expect(document.querySelectorAll('[data-ocvd="question-mic"]').length).toBe(1);
+  });
+
   it("renders a fallback inside the custom option when the footer is missing", () => {
     const { ui } = makeUi();
     const { option, field } = addQuestion({ withFooter: false });

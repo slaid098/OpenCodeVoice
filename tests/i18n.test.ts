@@ -48,7 +48,7 @@ describe("resolveLocale", () => {
 
 describe("translate", () => {
   it("substitutes named parameters", () => {
-    expect(translate("ru", "settings.subtitle", { version: "0.9.2" })).toBe("OpenCode 2 · v0.9.2");
+    expect(translate("ru", "settings.subtitle", { version: "0.9.3" })).toBe("OpenCode 2 · v0.9.3");
     expect(
       translate("en", "pipeline.retryIn", {
         label: "STT",

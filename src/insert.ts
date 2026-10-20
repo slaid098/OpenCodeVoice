@@ -174,36 +174,34 @@ function actionRow(
   return parent;
 }
 
+/**
+ * OpenCode can keep a hidden question dock from a previous render in the DOM.
+ * Always resolve the last visible dock, the same way findComposerDock() does.
+ */
+function findQuestionDock(): HTMLElement | null {
+  const docks = [...document.querySelectorAll<HTMLElement>(SELECTORS.questionDock)];
+  return docks.length > 0 ? lastVisible(docks) : null;
+}
+
+function findInQuestionDock<T extends Element>(selector: string): T | null {
+  const dock = findQuestionDock();
+  return dock ? dock.querySelector<T>(selector) : document.querySelector<T>(selector);
+}
+
 export function findQuestionInput(): QuestionInput | null {
-  const dock = document.querySelector<HTMLElement>(SELECTORS.questionDock);
-  return (
-    dock?.querySelector<QuestionInput>(SELECTORS.questionInput) ??
-    document.querySelector<QuestionInput>(SELECTORS.questionInput)
-  );
+  return findInQuestionDock<QuestionInput>(SELECTORS.questionInput);
 }
 
 export function findQuestionFooter(): HTMLElement | null {
-  const dock = document.querySelector<HTMLElement>(SELECTORS.questionDock);
-  return (
-    dock?.querySelector<HTMLElement>(SELECTORS.questionFooter) ??
-    document.querySelector<HTMLElement>(SELECTORS.questionFooter)
-  );
+  return findInQuestionDock<HTMLElement>(SELECTORS.questionFooter);
 }
 
 export function findQuestionHeaderActions(): HTMLElement | null {
-  const dock = document.querySelector<HTMLElement>(SELECTORS.questionDock);
-  return (
-    dock?.querySelector<HTMLElement>(SELECTORS.questionHeaderActions) ??
-    document.querySelector<HTMLElement>(SELECTORS.questionHeaderActions)
-  );
+  return findInQuestionDock<HTMLElement>(SELECTORS.questionHeaderActions);
 }
 
 export function findQuestionCustomOption(): HTMLElement | null {
-  const dock = document.querySelector<HTMLElement>(SELECTORS.questionDock);
-  return (
-    dock?.querySelector<HTMLElement>(SELECTORS.questionCustomOption) ??
-    document.querySelector<HTMLElement>(SELECTORS.questionCustomOption)
-  );
+  return findInQuestionDock<HTMLElement>(SELECTORS.questionCustomOption);
 }
 
 export function resolveTarget(preferred: InsertTarget): InsertTarget {

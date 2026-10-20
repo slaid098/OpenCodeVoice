@@ -67,7 +67,9 @@ The `dist` branch is the **only** distribution channel for the userscript. Deplo
 
 `LEGACY_SELECTORS` exists only as a fallback for older OpenCode 2 builds; do not extend it for OpenCode 1. Composer submit is a synthetic Enter keydown first, with a click on `[data-action="composer-submit"]` as fallback (ADR 0008).
 
-Question injection picks the container in this order: footer actions → header actions → custom option → legacy form. The mic is placed before the last foreign button in the footer/header, and after the field in the custom option. Keep exactly one question mic and move it when the container changes.
+Question injection picks the container in this order: header actions → footer actions → custom option → legacy form. The header comes first because the footer sits under the options and is often clipped by the bottom edge of a tall question panel, while the header is always on screen. The mic is placed before the last foreign button in the header/footer, and after the field in the custom option. Keep exactly one question mic and move it when the container changes.
+
+Question elements are resolved inside the **last visible** `session-question-dock` (the same rule as `findComposerDock()`), never through the first dock found in the document. OpenCode can leave a hidden dock from a previous render, and injecting into it makes the mic invisible.
 
 Question submit clicks the last enabled button in `question-footer-actions` (ignoring `[data-ocvd]`, `disabled`, and `aria-disabled="true"`); this both commits the custom answer and advances the form. Only the legacy DOM uses Enter → `form.requestSubmit()`. Do not send Enter first in the current DOM: it commits the input but does not submit the question.
 

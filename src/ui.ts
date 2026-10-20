@@ -885,9 +885,12 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
     );
     const fallback = document.querySelector<HTMLElement>('[data-ocvd="question-fallback"]');
 
+    // The footer sits under the options and is often clipped by the bottom
+    // edge of the window. Prefer the header, which is always on screen, and
+    // fall back to the footer only for DOM variants without header actions.
+    const header = findQuestionHeaderActions();
     const footer = findQuestionFooter();
-    const header = footer ? null : findQuestionHeaderActions();
-    const bar = footer ?? header;
+    const bar = [header, footer].find((candidate) => isVisibleNode(candidate)) ?? header ?? footer;
 
     if (bar) {
       if (isVisibleNode(existingMic) && !isVisibleNode(bar)) {

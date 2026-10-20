@@ -183,6 +183,14 @@ describe("DOM detection", () => {
     });
   });
 
+  it("prefers the visible question dock over a stale hidden one", () => {
+    const hidden = addQuestion();
+    Object.defineProperty(hidden.dock, "getClientRects", { value: () => [] });
+    const visible = addQuestion();
+    expect(findQuestionInput()).toBe(visible.field);
+    expect(findQuestionFooter()).toBe(visible.footer);
+  });
+
   it("detects legacy question prompts", () => {
     const { field } = addQuestion({ legacy: true, withFooter: false });
     expect(isQuestionPromptOpen()).toBe(true);
