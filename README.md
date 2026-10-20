@@ -41,7 +41,7 @@ A small userscript that records audio in the browser, sends it to a speech-to-te
 | ♻️ Recovery | Failed recordings and recognized text survive a page reload; retry, insert, or send them later. |
 | 🌍 RU / EN | The interface and the default prompts are available in Russian and English. |
 | ⌨️ Hotkeys | `Ctrl+Space` starts and stops dictation, `Esc` cancels it. |
-| 📱 Responsive | Works on desktop and mobile, including Firefox for Android. |
+| 📱 Responsive | Works in the OpenCode web interface on a computer and on a phone (phone: Firefox). |
 <!-- features-en:end -->
 
 ### 🎛 Settings
@@ -68,7 +68,7 @@ Open the panel with the gear button next to the microphone.
 
 ### ⚡ Quick Start
 
-1. Install a userscript manager: on a phone, the tested combination is Firefox + [Tampermonkey](https://www.tampermonkey.net/); on a desktop, any browser where [Tampermonkey](https://www.tampermonkey.net/) or [Violentmonkey](https://violentmonkey.github.io/) can be installed.
+1. Install a userscript manager: on a phone, Firefox + [Tampermonkey](https://www.tampermonkey.net/); on a computer, any browser where [Tampermonkey](https://www.tampermonkey.net/) or [Violentmonkey](https://violentmonkey.github.io/) can be installed.
 2. **[Install OpenCodeVoice](https://raw.githubusercontent.com/slaid098/OpenCodeVoice/dist/opencode-voice-dictation.user.js)**.
 3. Open the OpenCode 2 web interface and click the gear button next to the microphone.
 4. Paste a Groq API key — a free one is available at [console.groq.com/keys](https://console.groq.com/keys) — or choose a custom endpoint and fill in its URL and model.
@@ -115,7 +115,7 @@ npm run build
 | ♻️ Восстановление | Неудачные записи и распознанный текст переживают перезагрузку страницы: их можно повторить, вставить или отправить позже. |
 | 🌍 RU / EN | Интерфейс и стандартные промпты доступны на русском и английском. |
 | ⌨️ Горячие клавиши | `Ctrl+Space` запускает и останавливает диктовку, `Esc` отменяет её. |
-| 📱 Адаптивность | Работает на компьютере и телефоне, включая Firefox для Android. |
+| 📱 Адаптивность | Работает в веб-интерфейсе OpenCode на компьютере и телефоне (телефон: Firefox). |
 <!-- features-ru:end -->
 
 ### 🎛 Настройки
@@ -142,7 +142,7 @@ npm run build
 
 ### ⚡ Быстрый старт
 
-1. Установите менеджер userscript: на телефоне проверенная связка — Firefox + [Tampermonkey](https://www.tampermonkey.net/); на компьютере — любой браузер, где ставятся [Tampermonkey](https://www.tampermonkey.net/) или [Violentmonkey](https://violentmonkey.github.io/).
+1. Установите менеджер userscript: на телефоне — Firefox + [Tampermonkey](https://www.tampermonkey.net/); на компьютере — любой браузер, где ставятся [Tampermonkey](https://www.tampermonkey.net/) или [Violentmonkey](https://violentmonkey.github.io/).
 2. **[Установите OpenCodeVoice](https://raw.githubusercontent.com/slaid098/OpenCodeVoice/dist/opencode-voice-dictation.user.js)**.
 3. Откройте веб-интерфейс OpenCode 2 и нажмите шестерёнку рядом с микрофоном.
 4. Вставьте API-ключ Groq — бесплатный можно получить на [console.groq.com/keys](https://console.groq.com/keys) — или выберите свой адрес и укажите его URL и модель.
