@@ -1,240 +1,204 @@
-import { type AudioRecorder, createAudioRecorder } from "./audio.js";
+import { createAudioRecorder } from "./audio.js";
+import { isFirstRun, loadConfig, registerMenuCommands, saveConfig } from "./config.js";
 import {
-  DEFAULTS,
-  getConfig,
-  isFirstRun,
-  registerMenuCommands,
-  setConfig,
-  validateApiKey,
-} from "./config.js";
-
-const DEFAULTS_ENDPOINT = DEFAULTS.endpoint;
-import {
-  type InsertTarget,
   insertText,
   isOpencodePage,
   isQuestionPromptOpen,
+  replaceText,
+  resolveTarget,
   submitPrompt,
 } from "./insert.js";
 import { setupKeyboardShortcut } from "./keyboard.js";
+import { cleanupText } from "./llm.js";
+import { type Pipeline, type PipelineUi, createPipeline } from "./pipeline.js";
+import { type SettingsPanel, createSettingsPanel } from "./settings-panel.js";
+import {
+  audioFromFailure,
+  audioToArrayBuffer,
+  clearFailures,
+  getLatestFailure,
+  removeFailure,
+  requestPersistence,
+  saveFailure,
+} from "./storage.js";
 import { transcribe } from "./transcribe.js";
-import type { DictationState } from "./types.js";
-import { setupUI } from "./ui.js";
+import type { AppConfig, InsertTarget } from "./types.js";
+import { type Ui, createUi } from "./ui.js";
 
-let recorder: AudioRecorder | null = null;
-let currentState: DictationState = "idle";
-let timerInterval: ReturnType<typeof setInterval> | null = null;
-let elapsedSeconds = 0;
-let ui: ReturnType<typeof setupUI> | null = null;
-let currentTarget: InsertTarget = "composer";
+let config: AppConfig | null = null;
+let initialized = false;
+let ui: Ui | null = null;
+let settings: SettingsPanel | null = null;
+let pipeline: Pipeline | null = null;
 
-function startTimer(): void {
-  elapsedSeconds = 0;
-  timerInterval = setInterval(() => {
-    elapsedSeconds++;
-    ui?.updateState(currentState, elapsedSeconds);
-  }, 1000);
-}
+const storageAdapter = {
+  save: saveFailure,
+  latest: getLatestFailure,
+  remove: removeFailure,
+  toArrayBuffer: audioToArrayBuffer,
+  fromAudio: audioFromFailure,
+  requestPersistence,
+};
 
-function stopTimer(): void {
-  if (timerInterval) {
-    clearInterval(timerInterval);
-    timerInterval = null;
+function getConfig(): AppConfig {
+  if (!config) {
+    config = loadConfig();
   }
+  return config;
 }
 
-async function toggleDictation(target: InsertTarget): Promise<void> {
-  if (currentState === "idle") {
-    currentTarget = target;
-    await startRecording();
-  } else if (currentState === "recording") {
-    await stopAndTranscribe();
-  }
-}
-
-async function startRecording(): Promise<void> {
-  try {
-    recorder = createAudioRecorder();
-    await recorder.start();
-    currentState = "recording";
-    startTimer();
-    ui?.updateState(currentState, elapsedSeconds);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Failed to access microphone";
-    ui?.toast(message, true);
-    recorder = null;
-  }
-}
-
-async function stopAndTranscribe(): Promise<void> {
-  if (!recorder) {
+function setup(): void {
+  if (initialized) {
     return;
   }
+  initialized = true;
+  config = loadConfig();
 
-  stopTimer();
-  currentState = "processing";
-  ui?.updateState(currentState);
+  settings = createSettingsPanel({
+    getConfig,
+    saveConfig: (next) => {
+      saveConfig(next);
+      config = next;
+    },
+    getLastRawText: () => pipeline?.getCurrentFailure()?.rawText ?? null,
+    onSaved: (next) => {
+      config = next;
+      ui?.refresh();
+    },
+    onClearFailures: async () => {
+      await clearFailures();
+      await pipeline?.forget();
+      ui?.toast("Сохранённые ошибки очищены.", { durationMs: 2500 });
+    },
+  });
 
-  try {
-    const audioBlob = await recorder.stop();
-    const config = getConfig();
+  const pipelineUi: PipelineUi = {
+    setState: (state, elapsed) => ui?.setState(state, elapsed),
+    toast: (message, toastOptions) => ui?.toast(message, toastOptions),
+    showRecovery: (record, actions) => ui?.showRecovery(record, actions),
+    hideRecovery: () => ui?.hideRecovery(),
+    openSettings: () => settings?.open(),
+  };
 
-    const result = await transcribe(audioBlob, config);
+  pipeline = createPipeline({
+    getConfig,
+    createRecorder: createAudioRecorder,
+    transcribe,
+    cleanup: cleanupText,
+    insertText,
+    replaceText,
+    submitPrompt,
+    isQuestionOpen: isQuestionPromptOpen,
+    store: storageAdapter,
+    ui: pipelineUi,
+  });
 
-    if (result.text) {
-      const inserted = insertText(result.text, currentTarget);
-      if (!inserted) {
-        ui?.toast("Could not find input field", true);
-      } else if (config.autoSubmit && currentTarget === "composer") {
-        submitPrompt();
+  ui = createUi({
+    onToggle: (target) => {
+      void pipeline?.toggle(target);
+    },
+    onCancel: () => {
+      void pipeline?.cancel();
+    },
+    onOpenSettings: () => settings?.open(),
+  });
+
+  ui.start();
+
+  setupKeyboardShortcut(
+    () => {
+      if (settings?.isOpen()) {
+        return;
       }
-    }
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Transcription failed";
-    ui?.toast(message, true);
-  } finally {
-    currentState = "idle";
-    elapsedSeconds = 0;
-    recorder = null;
-    ui?.updateState(currentState);
-  }
-}
-
-async function cancelRecording(): Promise<void> {
-  if (currentState !== "recording" || !recorder) {
-    return;
-  }
-
-  stopTimer();
-
-  try {
-    await recorder.stop();
-  } catch {
-    // discard audio
-  }
-
-  currentState = "idle";
-  elapsedSeconds = 0;
-  recorder = null;
-  ui?.updateState(currentState);
-}
-
-function promptForApiKey(): void {
-  const key = prompt("Enter your Groq API key (get one free at console.groq.com/keys):", "");
-  if (key && validateApiKey(key)) {
-    setConfig({ groqApiKey: key.trim() });
-    ui?.toast("API key saved!");
-  } else if (key) {
-    ui?.toast("Invalid key format. Must start with 'gsk_'", true);
-  }
-}
-
-function promptForModel(): void {
-  const model = prompt(
-    "Whisper model (whisper-large-v3 or whisper-large-v3-turbo):",
-    getConfig().model,
+      const preferred: InsertTarget = isQuestionPromptOpen() ? "question" : "composer";
+      void pipeline?.toggle(resolveTarget(preferred));
+    },
+    "ctrl+space",
+    () => {
+      void pipeline?.cancel();
+    },
   );
-  if (model && (model === "whisper-large-v3" || model === "whisper-large-v3-turbo")) {
-    setConfig({ model });
-    ui?.toast(`Model set to ${model}`);
-  } else if (model) {
-    ui?.toast("Invalid model name", true);
+
+  void pipeline.recover();
+
+  if (isFirstRun(config)) {
+    setTimeout(() => {
+      if (!settings?.isOpen()) {
+        settings?.open();
+        ui?.toast("Для начала укажите API-ключ STT в настройках.", { durationMs: 5000 });
+      }
+    }, 700);
   }
 }
 
-function promptForLanguage(): void {
-  const lang = prompt(
-    "Language code (empty for auto-detect, e.g. 'ru', 'en'):",
-    getConfig().language,
-  );
-  if (lang !== null) {
-    setConfig({ language: lang.trim() });
-    ui?.toast(lang.trim() ? `Language set to ${lang}` : "Auto-detect enabled");
-  }
-}
-
-function promptForWhisperPrompt(): void {
-  const text = prompt("Whisper prompt (context for transcription):", getConfig().whisperPrompt);
-  if (text !== null) {
-    setConfig({ whisperPrompt: text });
-    ui?.toast("Whisper prompt updated");
-  }
-}
-
-function promptForEndpoint(): void {
-  const current = getConfig().endpoint;
-  const url = prompt("STT endpoint URL:", current);
-  if (url === null) {
+function maybeSetup(): void {
+  if (initialized) {
     return;
   }
-  const trimmed = url.trim();
-  const value = trimmed || DEFAULTS_ENDPOINT;
-  setConfig({ endpoint: value });
-  ui?.toast(`Endpoint set to ${value}`);
+  if (isOpencodePage()) {
+    setup();
+  }
 }
 
-function promptForTemperature(): void {
-  const current = getConfig().temperature;
-  const input = prompt("Temperature (0-1):", String(current));
-  if (input === null) {
+function waitForOpencode(attempt = 0): void {
+  if (initialized) {
     return;
   }
-  const parsed = Number(input);
-  if (Number.isNaN(parsed)) {
-    ui?.toast("Invalid temperature", true);
+  if (isOpencodePage()) {
+    setup();
     return;
   }
-  const clamped = Math.min(1, Math.max(0, parsed));
-  setConfig({ temperature: clamped });
-  ui?.toast(`Temperature set to ${clamped}`);
+  if (attempt >= 20) {
+    return;
+  }
+  const delay = Math.min(10_000, 500 * 1.5 ** attempt);
+  window.setTimeout(() => waitForOpencode(attempt + 1), delay);
 }
 
 function toggleAutoSubmit(): void {
-  const config = getConfig();
-  setConfig({ autoSubmit: !config.autoSubmit });
-  ui?.toast(`Auto-submit ${!config.autoSubmit ? "enabled" : "disabled"}`);
+  const current = loadConfig();
+  current.behavior.autoSubmit = !current.behavior.autoSubmit;
+  saveConfig(current);
+  config = current;
+  ui?.toast(`Автоотправка ${current.behavior.autoSubmit ? "включена" : "выключена"}.`, {
+    durationMs: 2500,
+  });
 }
 
-function checkFirstRun(): void {
-  if (isFirstRun()) {
-    setTimeout(() => {
-      ui?.toast("First run: Set your Groq API key via the Violentmonkey/Tampermonkey menu");
-    }, 2000);
+async function clearSaved(): Promise<void> {
+  await clearFailures();
+  await pipeline?.forget();
+  ui?.toast("Сохранённые ошибки очищены.", { durationMs: 2500 });
+}
+
+function registerMenus(): void {
+  registerMenuCommands({
+    onSettings: () => settings?.open(),
+    onToggleAutoSubmit: toggleAutoSubmit,
+    onRetryLast: () => {
+      void pipeline?.retryLast();
+    },
+    onClearFailures: () => {
+      void clearSaved();
+    },
+  });
+}
+
+function isTopFrame(): boolean {
+  try {
+    return window.top === window.self;
+  } catch {
+    return false;
   }
 }
 
-function init(): void {
-  if (!isOpencodePage()) {
-    console.log("[ocvd] OpenCode page not detected, retrying in 1.5s...");
-    setTimeout(init, 1500);
-    return;
-  }
-  console.log("[ocvd] OpenCode page detected, setting up UI");
-
-  ui = setupUI({
-    onToggle: (target: InsertTarget) => {
-      void toggleDictation(target);
-    },
-    onCancel: () => {
-      void cancelRecording();
-    },
+if (isTopFrame()) {
+  registerMenus();
+  waitForOpencode();
+  window.addEventListener("pageshow", maybeSetup);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") {
+      maybeSetup();
+    }
   });
-
-  setupKeyboardShortcut(() => {
-    void toggleDictation(isQuestionPromptOpen() ? "question" : "composer");
-  });
-
-  checkFirstRun();
 }
-
-registerMenuCommands({
-  onSetKey: promptForApiKey,
-  onToggleAutoSubmit: toggleAutoSubmit,
-  onSetModel: promptForModel,
-  onSetLanguage: promptForLanguage,
-  onSetPrompt: promptForWhisperPrompt,
-  onSetEndpoint: promptForEndpoint,
-  onSetTemperature: promptForTemperature,
-});
-
-init();

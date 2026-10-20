@@ -10,20 +10,19 @@ export default defineConfig({
   test: {
     environment: "happy-dom",
     include: ["tests/**/*.test.ts"],
+    setupFiles: ["./tests/setup.ts"],
     coverage: {
       provider: "v8",
       reporter: ["text", "html"],
       thresholds: {
-        lines: 60,
-        functions: 60,
-        branches: 60,
-        statements: 60,
+        lines: 70,
+        functions: 70,
+        branches: 70,
+        statements: 70,
       },
       exclude: [
         "tests/**",
         "src/index.ts",
-        "src/ui.ts",
-        "src/audio.ts",
         "src/types.ts",
         "dist/**",
         "vite.config.ts",

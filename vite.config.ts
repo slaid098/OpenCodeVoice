@@ -8,12 +8,19 @@ export default defineConfig({
       userscript: {
         name: "OpenCode Voice Dictation",
         namespace: "https://github.com/slaid098/opencode-voice-dictation",
-        version: "1.0.7",
+        version: "2.0.0",
         description:
-          "Voice dictation for OpenCode web using Whisper (Groq API) - works on PC and mobile",
+          "Voice dictation for OpenCode 2 web: Whisper STT, LLM cleanup, auto-submit, recovery — works on PC and mobile",
         author: "slaid098",
         match: ["*://*/*"],
-        grant: ["GM_xmlhttpRequest", "GM_getValue", "GM_setValue", "GM_registerMenuCommand"],
+        noframes: true,
+        grant: [
+          "GM_xmlhttpRequest",
+          "GM_getValue",
+          "GM_setValue",
+          "GM_registerMenuCommand",
+          "GM_info",
+        ],
         connect: ["*"],
         "run-at": "document-idle",
         icon: "https://git.slaid098.dev/slaid098/opencode-voice-dictation/raw/branch/main/assets/icon.png",
