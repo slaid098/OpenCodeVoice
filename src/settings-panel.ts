@@ -1087,10 +1087,16 @@ export function createSettingsPanel(deps: SettingsPanelDeps): SettingsPanel {
     const panel = element("div", "tab-panel");
     const info = section("Версия и страница");
     const versionCard = element("div", "diag-card");
+    const pageStatus = getSelectorStatus();
     versionCard.append(
       diagRow("Userscript", scriptVersion()),
       diagRow("Хост", window.location.host || "—"),
-      diagRow("Страница OpenCode", getSelectorStatus().composerDock ? "да" : "не обнаружена"),
+      diagRow(
+        "Страница OpenCode",
+        pageStatus.composerDock || pageStatus.composerForm || pageStatus.composerEditor
+          ? "да"
+          : "не обнаружена",
+      ),
     );
     info.appendChild(versionCard);
 
@@ -1104,8 +1110,10 @@ export function createSettingsPanel(deps: SettingsPanelDeps): SettingsPanel {
       const status = getSelectorStatus();
       const labels: Record<keyof typeof status, string> = {
         composerDock: "Composer dock",
+        composerForm: "Форма композера",
         composerEditor: "Поле ввода",
         composerActions: "Панель действий",
+        composerActionsResolved: "Панель действий (fallback)",
         composerSubmit: "Кнопка отправки",
         questionDock: "Question dock",
         questionInput: "Поле вопроса",

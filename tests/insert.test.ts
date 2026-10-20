@@ -108,8 +108,10 @@ describe("DOM detection", () => {
     expect(isOpencodePage()).toBe(true);
     expect(getSelectorStatus()).toEqual({
       composerDock: true,
+      composerForm: false,
       composerEditor: true,
       composerActions: true,
+      composerActionsResolved: true,
       composerSubmit: true,
       questionDock: false,
       questionInput: false,
@@ -126,6 +128,85 @@ describe("DOM detection", () => {
     expect(isQuestionPromptOpen()).toBe(true);
     expect(findQuestionInput()).not.toBeNull();
     expect(findQuestionFooter()).not.toBeNull();
+  });
+
+  it("finds actions through the composer form when the dock is missing", () => {
+    const form = document.createElement("form");
+    form.setAttribute("data-component", "composer");
+    const editor = document.createElement("div");
+    editor.setAttribute("data-component", "composer-editor");
+    editor.setAttribute("role", "textbox");
+    editor.setAttribute("aria-multiline", "true");
+    editor.setAttribute("contenteditable", "true");
+    const actions = document.createElement("div");
+    actions.setAttribute("data-slot", "composer-actions");
+    const submit = document.createElement("button");
+    submit.setAttribute("data-action", "composer-submit");
+    actions.appendChild(submit);
+    form.append(editor, actions);
+    document.body.appendChild(form);
+
+    expect(findComposerDock()).toBeNull();
+    expect(findComposerEditor()).toBe(editor);
+    expect(findComposerActions()).toBe(actions);
+    expect(getSelectorStatus()).toMatchObject({
+      composerDock: false,
+      composerForm: true,
+      composerEditor: true,
+      composerActions: true,
+      composerActionsResolved: true,
+    });
+  });
+
+  it("falls back to the submit row when the actions slot is missing", () => {
+    const form = document.createElement("form");
+    form.setAttribute("data-component", "composer");
+    const editor = document.createElement("div");
+    editor.setAttribute("data-component", "composer-editor");
+    editor.setAttribute("role", "textbox");
+    editor.setAttribute("aria-multiline", "true");
+    const row = document.createElement("div");
+    const submit = document.createElement("button");
+    submit.setAttribute("data-action", "composer-submit");
+    row.appendChild(submit);
+    form.append(editor, row);
+    document.body.appendChild(form);
+
+    expect(findComposerActions()).toBe(row);
+    expect(getSelectorStatus()).toMatchObject({
+      composerActions: false,
+      composerActionsResolved: true,
+    });
+  });
+
+  it("uses a global submit row when there is no dock or form", () => {
+    const editor = document.createElement("div");
+    editor.setAttribute("data-component", "composer-editor");
+    editor.setAttribute("role", "textbox");
+    editor.setAttribute("aria-multiline", "true");
+    const row = document.createElement("div");
+    const submit = document.createElement("button");
+    submit.setAttribute("data-action", "composer-submit");
+    row.appendChild(submit);
+    document.body.append(editor, row);
+
+    expect(findComposerActions()).toBe(row);
+  });
+
+  it("ignores question actions in the global fallback", () => {
+    const editor = document.createElement("div");
+    editor.setAttribute("data-component", "composer-editor");
+    editor.setAttribute("role", "textbox");
+    editor.setAttribute("aria-multiline", "true");
+    document.body.appendChild(editor);
+    const questionDock = document.createElement("div");
+    questionDock.setAttribute("data-component", "session-question-dock");
+    const questionActions = document.createElement("div");
+    questionActions.setAttribute("data-slot", "composer-actions");
+    questionDock.appendChild(questionActions);
+    document.body.appendChild(questionDock);
+
+    expect(findComposerActions()).toBeNull();
   });
 
   it("finds the last of several composer docks", () => {

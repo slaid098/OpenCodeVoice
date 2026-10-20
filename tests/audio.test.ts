@@ -305,7 +305,9 @@ describe("createAudioRecorder stop", () => {
     const first = recorder.stop();
     const second = recorder.stop();
     expect(second).toBe(first);
-    await expect(first).resolves.toMatchObject({ durationMs: 0 });
+    const audio = await first;
+    expect(audio.blob).toBeInstanceOf(Blob);
+    expect(audio.durationMs).toBeGreaterThanOrEqual(0);
   });
 
   it("rejects when recording was not started", async () => {

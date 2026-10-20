@@ -33,8 +33,8 @@ last_updated: 2026-10-20
 - `llm.ts` — Ollama native `/api/chat` (`think`) и OpenAI-compatible `/v1/chat/completions` (`reasoning_effort`); `validateCleanup` с fallback на сырой текст.
 - `models.ts` — `listSttModels`/`listLlmModels`: Ollama `/api/tags`, OpenAI `/v1/models`, обработка 404/405.
 - `storage.ts` — IndexedDB `opencode-voice-dictation` / `failures`; аудио как `ArrayBuffer`; prune (5 записей, 7 дней), quota handling, `requestPersistence`.
-- `insert.ts` — `SELECTORS` OpenCode 2, legacy fallback, `resolveTarget`, `insertText`/`replaceText`, `submitPrompt`, `getSelectorStatus`.
-- `ui.ts` — идемпотентная инъекция mic/gear в `composer-actions` и `question-footer-actions`, таймер, тост, recovery-баннер, Shadow DOM hosts.
+- `insert.ts` — `SELECTORS` OpenCode 2, legacy fallback, `resolveTarget`, `insertText`/`replaceText`, `submitPrompt`, `getSelectorStatus`; `findComposerActions` ищет dock → `composer-actions` → `form[data-component="composer"]` → родителя `composer-submit` → глобальный видимый slot.
+- `ui.ts` — идемпотентная инъекция mic/gear в `composer-actions` (или в найденный fallback-ряд) и `question-footer-actions`; если ряда нет — плавающая кнопка над формой композера; таймер, тост, recovery-баннер, Shadow DOM hosts.
 - `settings-panel.ts` — bottom sheet с вкладками STT / Очистка / Поведение / Диагностика; загрузка моделей, проверки подключения, редактируемый промпт.
 - `audio.ts` — `MediaRecorder`, MIME webm/opus → webm → mp4, `stop` с 3-секундным таймаутом, `cancel`.
 - `keyboard.ts` — `Ctrl+Space` toggle, `Escape` cancel; игнорирует `repeat`/`isComposing`, не срабатывает при открытой панели.
@@ -42,6 +42,7 @@ last_updated: 2026-10-20
 ## Patterns
 
 - Все DOM-селекторы OpenCode 2 собраны в `SELECTORS` (`insert.ts`); `LEGACY_SELECTORS` — только fallback для ранних 2.0.x.
+- Композер может не иметь `session-composer-dock` (наблюдалось на Firefox Android); поэтому действия ищутся по форме и родителю submit, а при их отсутствии mic/gear рендерятся плавающей кнопкой.
 - Вставка в contenteditable — `execCommand("insertText")` с fallback через `beforeinput`/`input`; в textarea — native setter + `InputEvent`.
 - Отправка композера — синтетический Enter, fallback — клик `[data-action="composer-submit"]`.
 - UI перерисовывается SolidJS, поэтому инъекция проверяет `isConnected`, помечает элементы `data-ocvd` и повторяется через MutationObserver.

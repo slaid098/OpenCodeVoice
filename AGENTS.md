@@ -11,7 +11,7 @@ Bump `version` in **both** files synchronously on every PR touching `src/`, `vit
 
 Desync (bumping only one file) = userscript managers (Tampermonkey/Violentmonkey) do not see the auto-update even though npm sees the new version. Without a bump at all, auto-update never triggers.
 
-Current version: **2.0.0** (OpenCode 2 web only).
+Current version: **2.0.1** (OpenCode 2 web only).
 
 ## `@connect`
 
@@ -36,6 +36,7 @@ The workflow always pushes `dist` to the GitHub mirror and pushes to Forgejo onl
 `SELECTORS` in `src/insert.ts` — the primary contract with the OpenCode 2 DOM:
 
 - composer dock: `[data-component="session-composer-dock"]`
+- composer form (fallback anchor): `form[data-component="composer"]`
 - editor: `[data-component="composer-editor"][role="textbox"][aria-multiline="true"]`
 - actions slot: `[data-slot="composer-actions"]`
 - submit: `[data-action="composer-submit"]`
@@ -43,6 +44,8 @@ The workflow always pushes `dist` to the GitHub mirror and pushes to Forgejo onl
 - question form: `form[data-slot="question-option"][data-custom="true"]`
 - question input: `textarea[data-slot="question-custom-input"]`
 - question footer: `[data-slot="question-footer-actions"]`
+
+`findComposerActions()` resolves in order: dock → `composer-actions` slot → composer form → parent of `composer-submit` → visible global actions slot. `ui.ts` injects into the resolved row; if no row exists, it places a floating mic above `form[data-component="composer"]`. Keep these fallbacks: Firefox Android may render the composer without `session-composer-dock`.
 
 `LEGACY_SELECTORS` exists only as a fallback for older 2.0.x builds; do not extend it for OpenCode 1.x — 2.0.0 does not support v1. Composer submit is a synthetic Enter keydown first, with a click on `[data-action="composer-submit"]` as fallback (ADR 0008). Question submit is Enter on the textarea, then `form.requestSubmit()`, then a footer button. Selector status is exposed in Settings → Diagnostics.
 

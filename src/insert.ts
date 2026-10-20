@@ -2,6 +2,7 @@ import type { InsertTarget, SelectorStatus } from "./types.js";
 
 export const SELECTORS = {
   composerDock: '[data-component="session-composer-dock"]',
+  composerForm: 'form[data-component="composer"]',
   editor: '[data-component="composer-editor"][role="textbox"][aria-multiline="true"]',
   composerActions: '[data-slot="composer-actions"]',
   submit: '[data-action="composer-submit"]',
@@ -23,6 +24,7 @@ export const LEGACY_SELECTORS = {
 
 const PAGE_DETECT_SELECTORS = [
   SELECTORS.composerDock,
+  SELECTORS.composerForm,
   SELECTORS.editor,
   SELECTORS.questionDock,
   SELECTORS.questionInput,
@@ -44,8 +46,10 @@ export function isQuestionPromptOpen(): boolean {
 export function getSelectorStatus(): SelectorStatus {
   return {
     composerDock: document.querySelector(SELECTORS.composerDock) !== null,
+    composerForm: document.querySelector(SELECTORS.composerForm) !== null,
     composerEditor: document.querySelector(SELECTORS.editor) !== null,
     composerActions: document.querySelector(SELECTORS.composerActions) !== null,
+    composerActionsResolved: findComposerActions() !== null,
     composerSubmit: document.querySelector(SELECTORS.submit) !== null,
     questionDock: document.querySelector(SELECTORS.questionDock) !== null,
     questionInput: document.querySelector(SELECTORS.questionInput) !== null,
@@ -78,11 +82,12 @@ export function findComposerDock(): HTMLElement | null {
 export function findComposerEditor(): HTMLElement | null {
   const dock = findComposerDock();
   if (dock) {
-    const editor = dock.querySelector<HTMLElement>(SELECTORS.editor);
+    const editor =
+      dock.querySelector<HTMLElement>(SELECTORS.editor) ??
+      dock.querySelector<HTMLElement>(LEGACY_SELECTORS.editor);
     if (editor) {
       return editor;
     }
-    return dock.querySelector<HTMLElement>(LEGACY_SELECTORS.editor);
   }
   return (
     document.querySelector<HTMLElement>(SELECTORS.editor) ??
@@ -90,12 +95,63 @@ export function findComposerEditor(): HTMLElement | null {
   );
 }
 
-export function findComposerActions(): HTMLElement | null {
-  const dock = findComposerDock();
-  if (!dock) {
+export function findComposerForm(
+  editor: HTMLElement | null = findComposerEditor(),
+): HTMLFormElement | null {
+  if (!editor) {
     return null;
   }
-  return dock.querySelector<HTMLElement>(SELECTORS.composerActions);
+  return (
+    editor.closest<HTMLFormElement>(SELECTORS.composerForm) ??
+    editor.closest<HTMLFormElement>("form")
+  );
+}
+
+export function findComposerActions(): HTMLElement | null {
+  const dock = findComposerDock();
+  const scoped = dock?.querySelector<HTMLElement>(SELECTORS.composerActions);
+  if (scoped) {
+    return scoped;
+  }
+
+  const editor = findComposerEditor();
+  const form = findComposerForm(editor);
+  if (form) {
+    const actions = form.querySelector<HTMLElement>(SELECTORS.composerActions);
+    if (actions) {
+      return actions;
+    }
+    const submit = form.querySelector<HTMLElement>(SELECTORS.submit);
+    const row = submit ? actionRow(submit, form, dock ?? editor) : null;
+    if (row) {
+      return row;
+    }
+  }
+
+  const globalActions = [
+    ...document.querySelectorAll<HTMLElement>(SELECTORS.composerActions),
+  ].filter(
+    (element) =>
+      element.getClientRects().length > 0 && element.closest(SELECTORS.questionDock) === null,
+  );
+  if (globalActions.length > 0) {
+    return globalActions[globalActions.length - 1] ?? null;
+  }
+
+  const globalSubmit = document.querySelector<HTMLElement>(SELECTORS.submit);
+  return globalSubmit ? actionRow(globalSubmit, form, dock ?? editor) : null;
+}
+
+function actionRow(
+  submit: HTMLElement,
+  form: HTMLElement | null,
+  editorOrDock: HTMLElement | null,
+): HTMLElement | null {
+  const parent = submit.parentElement;
+  if (!parent || parent === form || parent === editorOrDock) {
+    return null;
+  }
+  return parent;
 }
 
 export function findQuestionInput(): HTMLTextAreaElement | null {
@@ -151,9 +207,9 @@ export function submitComposer(): boolean {
   if (!notCanceled) {
     return true;
   }
-  const dock = editor.closest<HTMLElement>(SELECTORS.composerDock);
+  const container = editor.closest<HTMLElement>(SELECTORS.composerDock) ?? findComposerForm(editor);
   const button =
-    dock?.querySelector<HTMLButtonElement>(SELECTORS.submit) ??
+    container?.querySelector<HTMLButtonElement>(SELECTORS.submit) ??
     document.querySelector<HTMLButtonElement>(SELECTORS.submit) ??
     document.querySelector<HTMLButtonElement>(LEGACY_SELECTORS.submit);
   if (button && !button.disabled && button.getAttribute("aria-disabled") !== "true") {

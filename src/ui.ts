@@ -3,6 +3,8 @@ import {
   SELECTORS,
   findComposerActions,
   findComposerDock,
+  findComposerEditor,
+  findComposerForm,
   findQuestionFooter,
   findQuestionInput,
 } from "./insert.js";
@@ -122,6 +124,31 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
   display: inline-flex;
   gap: 2px;
   align-items: center;
+}
+.ocvd-floating-actions {
+  position: absolute;
+  right: 8px;
+  bottom: calc(100% + 8px);
+  z-index: 2147482999;
+  display: inline-flex;
+  gap: 2px;
+  align-items: center;
+  padding: 4px;
+  border-radius: 12px;
+  background: rgba(17, 24, 39, 0.92);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+  pointer-events: auto;
+}
+.ocvd-floating-actions--fixed {
+  position: fixed;
+  right: 12px;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 150px);
+}
+@media (prefers-color-scheme: light) {
+  .ocvd-floating-actions {
+    background: rgba(255, 255, 255, 0.96);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+  }
 }
 .ocvd-question-fallback {
   display: flex;
@@ -667,7 +694,9 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
     }
 
     const dock = findComposerDock();
-    if (!dock) {
+    const editor = findComposerEditor();
+    const form = findComposerForm(editor);
+    if (!dock && !form) {
       return;
     }
     if (fallback?.isConnected) {
@@ -679,14 +708,31 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
     if (existingGear) {
       existingGear.remove();
     }
-    if (window.getComputedStyle(dock).position === "static") {
-      dock.style.position = "relative";
-    }
+
     const container = document.createElement("div");
-    container.className = "ocvd-fallback-actions";
     container.dataset.ocvd = "composer-fallback";
     container.append(makeGearButton(), makeMicButton("composer"));
-    dock.appendChild(container);
+
+    if (dock) {
+      container.className = "ocvd-fallback-actions";
+      if (window.getComputedStyle(dock).position === "static") {
+        dock.style.position = "relative";
+      }
+      dock.appendChild(container);
+      return;
+    }
+
+    const anchor = form?.parentElement ?? null;
+    container.className = "ocvd-floating-actions";
+    if (anchor) {
+      if (window.getComputedStyle(anchor).position === "static") {
+        anchor.style.position = "relative";
+      }
+      anchor.appendChild(container);
+    } else {
+      container.classList.add("ocvd-floating-actions--fixed");
+      document.documentElement.appendChild(container);
+    }
   };
 
   const injectQuestion = (): void => {

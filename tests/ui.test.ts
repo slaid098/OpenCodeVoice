@@ -174,6 +174,77 @@ describe("composer injection", () => {
     expect(onOpenSettings).toHaveBeenCalledTimes(1);
   });
 
+  it("injects into the submit row when the dock is missing", () => {
+    const { ui, onToggle } = makeUi();
+    const form = document.createElement("form");
+    form.setAttribute("data-component", "composer");
+    const editor = document.createElement("div");
+    editor.setAttribute("data-component", "composer-editor");
+    editor.setAttribute("role", "textbox");
+    editor.setAttribute("aria-multiline", "true");
+    editor.setAttribute("contenteditable", "true");
+    const row = document.createElement("div");
+    const submit = document.createElement("button");
+    submit.type = "submit";
+    submit.setAttribute("data-action", "composer-submit");
+    row.appendChild(submit);
+    form.append(editor, row);
+    document.body.appendChild(form);
+
+    ui.start();
+
+    const gear = row.querySelector<HTMLButtonElement>('[data-ocvd="composer-settings"]');
+    const mic = row.querySelector<HTMLButtonElement>('[data-ocvd="composer-mic"]');
+    expect(gear).not.toBeNull();
+    expect(mic).not.toBeNull();
+    expect([...row.children]).toEqual([gear, mic, submit]);
+    mic?.click();
+    expect(onToggle).toHaveBeenCalledWith("composer");
+  });
+
+  it("renders a floating fallback when the dock, actions and submit are missing", () => {
+    const { ui } = makeUi();
+    const form = document.createElement("form");
+    form.setAttribute("data-component", "composer");
+    const editor = document.createElement("div");
+    editor.setAttribute("data-component", "composer-editor");
+    editor.setAttribute("role", "textbox");
+    editor.setAttribute("aria-multiline", "true");
+    form.appendChild(editor);
+    document.body.appendChild(form);
+
+    ui.start();
+
+    const fallback = document.querySelector<HTMLElement>('[data-ocvd="composer-fallback"]');
+    expect(fallback).not.toBeNull();
+    expect(fallback?.classList.contains("ocvd-floating-actions")).toBe(true);
+    expect(fallback?.querySelector('[data-ocvd="composer-mic"]')).not.toBeNull();
+    expect(fallback?.querySelector('[data-ocvd="composer-settings"]')).not.toBeNull();
+  });
+
+  it("moves the mic from the floating fallback into a later submit row", () => {
+    const { ui } = makeUi();
+    const form = document.createElement("form");
+    form.setAttribute("data-component", "composer");
+    const editor = document.createElement("div");
+    editor.setAttribute("data-component", "composer-editor");
+    editor.setAttribute("role", "textbox");
+    editor.setAttribute("aria-multiline", "true");
+    form.appendChild(editor);
+    document.body.appendChild(form);
+    ui.start();
+
+    const row = document.createElement("div");
+    const submit = document.createElement("button");
+    submit.setAttribute("data-action", "composer-submit");
+    row.appendChild(submit);
+    form.appendChild(row);
+    ui.refresh();
+
+    expect(document.querySelector('[data-ocvd="composer-fallback"]')).toBeNull();
+    expect(row.querySelector('[data-ocvd="composer-mic"]')).not.toBeNull();
+  });
+
   it("renders a fallback container when composer actions are missing", () => {
     const { ui } = makeUi();
     const { dock } = addComposer({ withActions: false });

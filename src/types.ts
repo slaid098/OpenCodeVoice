@@ -87,8 +87,10 @@ export interface FailedDictation {
 
 export interface SelectorStatus {
   composerDock: boolean;
+  composerForm: boolean;
   composerEditor: boolean;
   composerActions: boolean;
+  composerActionsResolved: boolean;
   composerSubmit: boolean;
   questionDock: boolean;
   questionInput: boolean;
