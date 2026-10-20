@@ -58,6 +58,7 @@ export interface PipelineDeps {
   insertText: (text: string, target: InsertTarget) => boolean;
   replaceText: (text: string, target: InsertTarget) => boolean;
   submitPrompt: (target: InsertTarget) => boolean;
+  isSubmitBusy: () => boolean;
   isQuestionOpen: () => boolean;
   getSessionPath: () => string;
   rememberDraft: (target: InsertTarget) => void;
@@ -492,6 +493,12 @@ export function createPipeline(deps: PipelineDeps): Pipeline {
     }
     if (submitted) {
       await finishSuccess(record, t("pipeline.sent"));
+      return;
+    }
+    // The agent is still working or the session is blocked. The text is
+    // already in the composer; keep it there instead of showing an error.
+    if (deps.isSubmitBusy()) {
+      await finishSuccess(record, t("pipeline.agentBusy"), 6000);
       return;
     }
     await fail(

@@ -213,7 +213,7 @@ describe("opening and closing", () => {
     expect(sheet.getAttribute("role")).toBe("dialog");
     expect(sheet.getAttribute("aria-modal")).toBe("true");
     expect(root().querySelector(".title")?.textContent).toBe("Голосовой ввод");
-    expect(root().querySelector(".subtitle")?.textContent).toBe("OpenCode 2 · v0.9.3");
+    expect(root().querySelector(".subtitle")?.textContent).toBe("OpenCode 2 · v0.9.4");
     expect(root().querySelector('.tab[data-tab="stt"]')?.getAttribute("aria-selected")).toBe(
       "true",
     );
@@ -852,7 +852,7 @@ describe("diagnostics tab", () => {
     await vi.waitFor(() => {
       expect(root().textContent).toContain("Сохранённых ошибок нет.");
     });
-    expect(root().textContent).toContain("0.9.3");
+    expect(root().textContent).toContain("0.9.4");
     expect(root().textContent).toContain("не обнаружена");
     expect(root().textContent).toContain("Composer dock");
     expect(root().textContent).toContain("Микрофон в композере");

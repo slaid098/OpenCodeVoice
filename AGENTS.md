@@ -63,9 +63,9 @@ The `dist` branch is the **only** distribution channel for the userscript. Deplo
 - question header actions: `[data-slot="question-header-actions"]`
 - question footer: `[data-slot="question-footer-actions"]`
 
-`findComposerActions()` resolves in order: dock → `composer-actions` slot → composer form → parent of `composer-submit` → visible global actions slot. `ui.ts` injects into the resolved row; if no row exists, it places a floating mic above `form[data-component="composer"]`. Keep these fallbacks: Firefox Android may render the composer without `session-composer-dock`.
+`findComposerEditor()` prefers the visible editor inside the dock, then the last visible editor in the document (a stale hidden composer must not win), then the dock editor/last editor. `findComposerActions()` resolves through that editor first: `composer-actions` inside its form → the form's submit row → the dock's `composer-actions` → the last visible global actions slot outside a question dock → the global submit row. `ui.ts` injects into the resolved row; if no row exists, it places a floating mic above `form[data-component="composer"]`. Keep these fallbacks: Firefox Android may render the composer without `session-composer-dock`.
 
-`LEGACY_SELECTORS` exists only as a fallback for older OpenCode 2 builds; do not extend it for OpenCode 1. Composer submit is a synthetic Enter keydown first, with a click on `[data-action="composer-submit"]` as fallback (ADR 0008).
+`LEGACY_SELECTORS` exists only as a fallback for older OpenCode 2 builds; do not extend it for OpenCode 1. Composer submit first checks the submit button: when it is `disabled` or `aria-disabled="true"`, return `false` without dispatching Enter, because OpenCode will not accept the message (the agent is working, the session is blocked, or uploads are pending). Otherwise dispatch a synthetic Enter keydown first, with a click on `[data-action="composer-submit"]` as fallback (ADR 0008).
 
 Question injection picks the container in this order: header actions → footer actions → custom option → legacy form. The header comes first because the footer sits under the options and is often clipped by the bottom edge of a tall question panel, while the header is always on screen. The mic is placed before the last foreign button in the header/footer, and after the field in the custom option. Keep exactly one question mic and move it when the container changes.
 
@@ -89,6 +89,7 @@ Auto-submit is global, on by default, and is the primary mode. Do NOT add per-re
 - `rawInserted = true` after any successful insertion (normal or manual). It prevents duplicate insertion: the next recovery offers "Submit" instead of "Insert text". `submitRaw()` keeps `cleanText` (`record.cleanText = record.cleanText || record.rawText`).
 - `rememberDraft(target)` snapshots the composer editor text or question input value at recording start; `isDraftChanged(target)` compares it before insertion. If the draft changed and auto-submit is on, insert the text but skip submission and show a toast. With auto-submit off, behavior is unchanged.
 - Draft comparison is plain text equality, not caret position or selection; cursor insertion and selection replacement are out of scope for now.
+- `runSubmit` inserts first and only then submits. If `submitPrompt()` returns `false` and `isSubmitBusy()` is true, finish with the `pipeline.agentBusy` toast and keep the text in the composer: the agent is still working, the session is blocked, or uploads are pending. Do not show a submit error or a recovery banner in this case.
 
 ## Compact recording UI
 
@@ -105,7 +106,9 @@ Auto-submit is global, on by default, and is the primary mode. Do NOT add per-re
 
 ## Mic re-injection
 
-`handleMutations()` schedules `inject()` when foreign nodes are added **and** when an Element containing our nodes was removed and is no longer connected. This covers OpenCode deleting only our button without adding anything else. A 1-second heartbeat (`setInterval`, only while `document.visibilityState === "visible"`) is the last-resort safety net; `inject()` must stay idempotent so the heartbeat does not move nodes. Do not remove the heartbeat without an equally reliable replacement. When an existing mic is visible but the target container is temporarily invisible, leave the mic in place instead of removing it.
+`handleMutations()` schedules `inject()` when foreign nodes are added **and** when an Element containing our nodes was removed and is no longer connected. This covers OpenCode deleting only our button without adding anything else. A 1-second heartbeat (`setInterval`, only while `document.visibilityState === "visible"`) is the last-resort safety net; `inject()` must stay idempotent so the heartbeat does not move nodes. Do not remove the heartbeat without an equally reliable replacement. Keep exactly one composer mic and one gear for the whole page (`takeButton`).
+
+When the actions row exists but is invisible, off-screen, or covered (`isVisibleNode`/`isOnScreen`/`isHittable`), move the buttons to a fallback instead of leaving them unavailable: inside a visible composer dock (`ocvd-fallback-actions`), otherwise a fixed floating panel on `document.documentElement` (`ocvd-floating-actions--fixed`). Never move them into a hidden dock. When the row becomes usable again, put the buttons back in front of the submit button and remove the fallback. A row that is visible but cannot fit the buttons is retried after `ROW_RETRY_MS` (15 s) or when its geometry changes. While a visible question dock is open, do not create a composer fallback: the question dock owns the visible mic.
 
 ## Stack
 

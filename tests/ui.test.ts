@@ -301,6 +301,87 @@ describe("composer injection", () => {
     expect(fallback?.querySelector('[data-ocvd="composer-settings"]')).not.toBeNull();
   });
 
+  it("keeps the mic and gear available when the actions row is hidden", () => {
+    const { ui, onToggle } = makeUi();
+    const { dock, actions: slot } = addComposer();
+    Object.defineProperty(slot, "getClientRects", { value: () => [], configurable: true });
+    ui.start();
+
+    expect(slot?.querySelector('[data-ocvd="composer-mic"]')).toBeNull();
+    const fallback = document.querySelector<HTMLElement>('[data-ocvd="composer-fallback"]');
+    expect(fallback).not.toBeNull();
+    expect(fallback?.parentElement).toBe(dock);
+    expect(fallback?.querySelector('[data-ocvd="composer-settings"]')).not.toBeNull();
+    const mic = fallback?.querySelector<HTMLButtonElement>('[data-ocvd="composer-mic"]');
+    expect(mic).not.toBeNull();
+    mic?.click();
+    expect(onToggle).toHaveBeenCalledWith("composer");
+    expect(document.querySelectorAll('[data-ocvd="composer-mic"]')).toHaveLength(1);
+    expect(document.querySelectorAll('[data-ocvd="composer-settings"]')).toHaveLength(1);
+  });
+
+  it("returns the buttons to the actions row when it becomes visible again", () => {
+    const { ui } = makeUi();
+    const { actions: slot } = addComposer();
+    Object.defineProperty(slot, "getClientRects", { value: () => [], configurable: true });
+    ui.start();
+    expect(document.querySelector('[data-ocvd="composer-fallback"]')).not.toBeNull();
+
+    Reflect.deleteProperty(slot as HTMLElement, "getClientRects");
+    ui.refresh();
+
+    expect(document.querySelector('[data-ocvd="composer-fallback"]')).toBeNull();
+    expect(slot?.querySelector('[data-ocvd="composer-mic"]')).not.toBeNull();
+    expect(slot?.querySelector('[data-ocvd="composer-settings"]')).not.toBeNull();
+    expect(document.querySelectorAll('[data-ocvd="composer-mic"]')).toHaveLength(1);
+  });
+
+  it("does not float a composer fallback while a question is open", () => {
+    const { ui } = makeUi();
+    const { dock, editor, actions: slot } = addComposer();
+    for (const node of [dock, editor, slot]) {
+      if (node) {
+        Object.defineProperty(node, "getClientRects", { value: () => [], configurable: true });
+      }
+    }
+    addQuestion({ withHeader: true });
+    ui.start();
+
+    expect(document.querySelector('[data-ocvd="composer-fallback"]')).toBeNull();
+    expect(document.querySelector('button[data-ocvd="composer-mic"]')).toBeNull();
+    expect(document.querySelector('button[data-ocvd="question-mic"]')).not.toBeNull();
+  });
+
+  it("uses a fixed fallback when the whole composer dock is hidden", () => {
+    const { ui } = makeUi();
+    const { dock, editor, actions: slot } = addComposer();
+    for (const node of [dock, editor, slot]) {
+      if (node) {
+        Object.defineProperty(node, "getClientRects", { value: () => [], configurable: true });
+      }
+    }
+    ui.start();
+
+    const fallback = document.querySelector<HTMLElement>('[data-ocvd="composer-fallback"]');
+    expect(fallback).not.toBeNull();
+    expect(fallback?.parentElement).toBe(document.documentElement);
+    expect(fallback?.classList.contains("ocvd-floating-actions--fixed")).toBe(true);
+    expect(fallback?.querySelector('[data-ocvd="composer-mic"]')).not.toBeNull();
+  });
+
+  it("ignores a stale hidden composer when a visible one exists", () => {
+    const { ui } = makeUi();
+    const stale = addComposer();
+    Object.defineProperty(stale.dock, "getClientRects", { value: () => [], configurable: true });
+    const visible = addComposer();
+    ui.start();
+
+    expect(stale.actions?.querySelector('[data-ocvd="composer-mic"]')).toBeNull();
+    expect(visible.actions?.querySelector('[data-ocvd="composer-mic"]')).not.toBeNull();
+    expect(visible.actions?.querySelector('[data-ocvd="composer-settings"]')).not.toBeNull();
+    expect(document.querySelectorAll('[data-ocvd="composer-mic"]')).toHaveLength(1);
+  });
+
   it("re-injects after OpenCode re-renders the toolbar", async () => {
     const { ui } = makeUi();
     const { actions: slot } = addComposer();

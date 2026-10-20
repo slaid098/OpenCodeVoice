@@ -9,6 +9,7 @@ import {
   findQuestionInput,
   getSelectorStatus,
   insertText,
+  isComposerSubmitBusy,
   isDraftChanged,
   isOpencodePage,
   isQuestionPromptOpen,
@@ -289,6 +290,51 @@ describe("DOM detection", () => {
     expect(first.dock).not.toBe(second.dock);
   });
 
+  it("prefers the last visible composer editor when there is no dock", () => {
+    const makeForm = (): { form: HTMLFormElement; editor: HTMLElement } => {
+      const form = document.createElement("form");
+      form.setAttribute("data-component", "composer");
+      const editor = document.createElement("div");
+      editor.setAttribute("data-component", "composer-editor");
+      editor.setAttribute("role", "textbox");
+      editor.setAttribute("aria-multiline", "true");
+      form.appendChild(editor);
+      document.body.appendChild(form);
+      return { form, editor };
+    };
+    const stale = makeForm();
+    Object.defineProperty(stale.form, "getClientRects", { value: () => [] });
+    const visible = makeForm();
+
+    expect(findComposerEditor()).toBe(visible.editor);
+  });
+
+  it("keeps actions of a visible composer over a stale hidden dock", () => {
+    const stale = addComposer();
+    const visible = addComposer();
+    Object.defineProperty(stale.dock, "getClientRects", { value: () => [] });
+    Object.defineProperty(stale.actions, "getClientRects", { value: () => [] });
+
+    expect(findComposerActions()).toBe(visible.actions);
+    expect(findComposerEditor()).toBe(visible.editor);
+  });
+
+  it("reports a disabled composer submit button as busy", () => {
+    const { submit } = addComposer();
+    expect(isComposerSubmitBusy()).toBe(false);
+    if (submit) {
+      submit.disabled = true;
+    }
+    expect(isComposerSubmitBusy()).toBe(true);
+    if (submit) {
+      submit.disabled = false;
+      submit.setAttribute("aria-disabled", "true");
+    }
+    expect(isComposerSubmitBusy()).toBe(true);
+    submit?.remove();
+    expect(isComposerSubmitBusy()).toBe(false);
+  });
+
   it("supports legacy composer selectors", () => {
     const dock = document.createElement("div");
     dock.setAttribute("data-component", "session-prompt-dock");
@@ -464,6 +510,18 @@ describe("composer submission", () => {
 
     submit?.remove();
     expect(submitComposer()).toBe(false);
+  });
+
+  it("does not dispatch Enter while the submit button is disabled", () => {
+    const { editor, submit } = addComposer();
+    const keydown = vi.fn((event: Event) => event.preventDefault());
+    editor.addEventListener("keydown", keydown);
+    if (submit) {
+      submit.disabled = true;
+    }
+
+    expect(submitComposer()).toBe(false);
+    expect(keydown).not.toHaveBeenCalled();
   });
 
   it("dispatches Enter with the expected properties", () => {

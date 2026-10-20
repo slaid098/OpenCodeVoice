@@ -101,18 +101,26 @@ export function findComposerDock(): HTMLElement | null {
 
 export function findComposerEditor(): HTMLElement | null {
   const dock = findComposerDock();
-  if (dock) {
-    const editor =
-      dock.querySelector<HTMLElement>(SELECTORS.editor) ??
-      dock.querySelector<HTMLElement>(LEGACY_SELECTORS.editor);
-    if (editor) {
-      return editor;
-    }
+  const dockEditor = dock
+    ? (dock.querySelector<HTMLElement>(SELECTORS.editor) ??
+      dock.querySelector<HTMLElement>(LEGACY_SELECTORS.editor))
+    : null;
+  if (dockEditor && dockEditor.getClientRects().length > 0) {
+    return dockEditor;
   }
-  return (
-    document.querySelector<HTMLElement>(SELECTORS.editor) ??
-    document.querySelector<HTMLElement>(LEGACY_SELECTORS.editor)
-  );
+
+  // OpenCode can keep a hidden composer from a previous render, and Firefox
+  // Android may not render a dock at all. Prefer the last visible editor over
+  // the first stale one.
+  const editors = [
+    ...document.querySelectorAll<HTMLElement>(SELECTORS.editor),
+    ...document.querySelectorAll<HTMLElement>(LEGACY_SELECTORS.editor),
+  ];
+  const visible = editors.filter((editor) => editor.getClientRects().length > 0);
+  if (visible.length > 0) {
+    return visible[visible.length - 1] ?? null;
+  }
+  return dockEditor ?? editors[editors.length - 1] ?? null;
 }
 
 export function findComposerForm(
@@ -128,12 +136,8 @@ export function findComposerForm(
 }
 
 export function findComposerActions(): HTMLElement | null {
-  const dock = findComposerDock();
-  const scoped = dock?.querySelector<HTMLElement>(SELECTORS.composerActions);
-  if (scoped) {
-    return scoped;
-  }
-
+  // Resolve through the selected editor first: the dock may be hidden while a
+  // visible composer lives outside it (or vice versa).
   const editor = findComposerEditor();
   const form = findComposerForm(editor);
   if (form) {
@@ -142,10 +146,16 @@ export function findComposerActions(): HTMLElement | null {
       return actions;
     }
     const submit = form.querySelector<HTMLElement>(SELECTORS.submit);
-    const row = submit ? actionRow(submit, form, dock ?? editor) : null;
+    const row = submit ? actionRow(submit, form, editor) : null;
     if (row) {
       return row;
     }
+  }
+
+  const dock = findComposerDock();
+  const scoped = dock?.querySelector<HTMLElement>(SELECTORS.composerActions);
+  if (scoped) {
+    return scoped;
   }
 
   const globalActions = [
@@ -160,6 +170,31 @@ export function findComposerActions(): HTMLElement | null {
 
   const globalSubmit = document.querySelector<HTMLElement>(SELECTORS.submit);
   return globalSubmit ? actionRow(globalSubmit, form, dock ?? editor) : null;
+}
+
+function findComposerSubmit(editor: HTMLElement): HTMLButtonElement | null {
+  const form = findComposerForm(editor);
+  const dock = editor.closest<HTMLElement>(SELECTORS.composerDock) ?? findComposerDock();
+  return (
+    dock?.querySelector<HTMLButtonElement>(SELECTORS.submit) ??
+    form?.querySelector<HTMLButtonElement>(SELECTORS.submit) ??
+    document.querySelector<HTMLButtonElement>(SELECTORS.submit) ??
+    document.querySelector<HTMLButtonElement>(LEGACY_SELECTORS.submit)
+  );
+}
+
+/** True when the composer has a submit button that cannot send right now. */
+export function isComposerSubmitBusy(): boolean {
+  const editor = findComposerEditor();
+  if (!editor) {
+    return false;
+  }
+  const button = findComposerSubmit(editor);
+  return button !== null && isButtonDisabled(button);
+}
+
+function isButtonDisabled(button: HTMLButtonElement): boolean {
+  return button.disabled || button.getAttribute("aria-disabled") === "true";
 }
 
 function actionRow(
@@ -272,18 +307,21 @@ export function submitComposer(): boolean {
   if (!editor) {
     return false;
   }
+  const button = findComposerSubmit(editor);
+  // A disabled submit means OpenCode will not accept the message right now
+  // (the agent is still working, the session is blocked, or uploads are
+  // pending). Dispatching Enter anyway can be swallowed by the editor, so
+  // report the failure instead of pretending the message was sent.
+  if (button && isButtonDisabled(button)) {
+    return false;
+  }
   editor.focus();
   const event = createEnterEvent();
   const notCanceled = editor.dispatchEvent(event);
   if (!notCanceled) {
     return true;
   }
-  const container = editor.closest<HTMLElement>(SELECTORS.composerDock) ?? findComposerForm(editor);
-  const button =
-    container?.querySelector<HTMLButtonElement>(SELECTORS.submit) ??
-    document.querySelector<HTMLButtonElement>(SELECTORS.submit) ??
-    document.querySelector<HTMLButtonElement>(LEGACY_SELECTORS.submit);
-  if (button && !button.disabled && button.getAttribute("aria-disabled") !== "true") {
+  if (button) {
     button.click();
     return true;
   }

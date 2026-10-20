@@ -86,9 +86,9 @@ export function createSettingsPanel(deps: SettingsPanelDeps): SettingsPanel {
   const scriptVersion = (): string => {
     try {
       const version = GM_info?.script?.version;
-      return typeof version === "string" && version !== "" ? version : "0.9.3";
+      return typeof version === "string" && version !== "" ? version : "0.9.4";
     } catch {
-      return "0.9.3";
+      return "0.9.4";
     }
   };
 

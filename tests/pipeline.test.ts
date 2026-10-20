@@ -150,6 +150,7 @@ interface Harness {
   insertText: ReturnType<typeof vi.fn>;
   replaceText: ReturnType<typeof vi.fn>;
   submitPrompt: ReturnType<typeof vi.fn>;
+  isSubmitBusy: ReturnType<typeof vi.fn>;
   isQuestionOpen: ReturnType<typeof vi.fn>;
   getSessionPath: ReturnType<typeof vi.fn>;
   rememberDraft: ReturnType<typeof vi.fn>;
@@ -178,6 +179,7 @@ function setup(overrides: Partial<PipelineDeps> = {}): Harness {
   const insertText = vi.fn(() => true);
   const replaceText = vi.fn(() => true);
   const submitPrompt = vi.fn(() => true);
+  const isSubmitBusy = vi.fn(() => false);
   const isQuestionOpen = vi.fn(() => true);
   const getSessionPath = vi.fn(() => "/server/local/session/a");
   const rememberDraft = vi.fn();
@@ -192,6 +194,7 @@ function setup(overrides: Partial<PipelineDeps> = {}): Harness {
     insertText,
     replaceText,
     submitPrompt,
+    isSubmitBusy,
     isQuestionOpen,
     getSessionPath,
     rememberDraft,
@@ -214,6 +217,7 @@ function setup(overrides: Partial<PipelineDeps> = {}): Harness {
     insertText,
     replaceText,
     submitPrompt,
+    isSubmitBusy,
     isQuestionOpen,
     getSessionPath,
     rememberDraft,
@@ -617,6 +621,19 @@ describe("pipeline failure recovery", () => {
     await h.pipeline.retryLast();
     expect(h.insertText).toHaveBeenCalledTimes(1);
     expect(h.submitPrompt).toHaveBeenCalledTimes(2);
+    expect(h.store.records.size).toBe(0);
+  });
+
+  it("keeps the inserted text when the agent is still working", async () => {
+    const h = setup();
+    h.submitPrompt.mockReturnValue(false);
+    h.isSubmitBusy.mockReturnValue(true);
+    await h.pipeline.start("composer");
+    await h.pipeline.stop();
+
+    expect(h.insertText).toHaveBeenCalledTimes(1);
+    expect(h.ui.recoveries).toHaveLength(0);
+    expect(h.ui.toasts.at(-1)?.message).toMatch(/Агент ещё работает/);
     expect(h.store.records.size).toBe(0);
   });
 

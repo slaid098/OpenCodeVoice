@@ -57,6 +57,9 @@ const RETRY_KEY: Record<FailedDictation["stage"], MessageKey> = {
   submit: "ui.retry.submit",
 };
 
+/** Retry a layout that could not fit our buttons after this pause. */
+const ROW_RETRY_MS = 15_000;
+
 export function createUi(options: UiOptions): Ui {
   let phase: DictationPhase = "idle";
   let elapsedSeconds = 0;
@@ -65,6 +68,7 @@ export function createUi(options: UiOptions): Ui {
   let scheduled: ReturnType<typeof setTimeout> | null = null;
   let heartbeat: ReturnType<typeof setInterval> | null = null;
   let toastTimer: ReturnType<typeof setTimeout> | null = null;
+  let blockedActions: { node: HTMLElement; key: string; until: number } | null = null;
 
   let host: HTMLElement | null = null;
   let shadow: ShadowRoot | null = null;
@@ -137,10 +141,11 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
   position: absolute;
   right: 56px;
   bottom: 8px;
-  z-index: 5;
+  z-index: 2147482999;
   display: inline-flex;
   gap: 2px;
   align-items: center;
+  pointer-events: auto;
 }
 .ocvd-floating-actions {
   position: absolute;
@@ -781,30 +786,137 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
     return nodes[0] ?? null;
   };
 
+  /** Keep one button for the whole page and drop any duplicates. */
+  const takeButton = (selector: string, create: () => HTMLButtonElement): HTMLButtonElement => {
+    const nodes = [...document.querySelectorAll<HTMLButtonElement>(selector)];
+    const button = nodes[0] ?? create();
+    for (const extra of nodes.slice(1)) {
+      extra.remove();
+    }
+    return button;
+  };
+
+  const isOnScreen = (node: HTMLElement): boolean => {
+    if (node.getClientRects().length === 0) {
+      return false;
+    }
+    const rect = node.getBoundingClientRect();
+    const width = window.innerWidth || document.documentElement.clientWidth || 0;
+    const height = window.innerHeight || document.documentElement.clientHeight || 0;
+    if (width === 0 || height === 0 || (rect.width === 0 && rect.height === 0)) {
+      return true;
+    }
+    return (
+      rect.left >= -1 && rect.top >= -1 && rect.right <= width + 1 && rect.bottom <= height + 1
+    );
+  };
+
+  /**
+   * True when the element receives a click at its centre. OpenCode overlays
+   * the composer while the agent works, and Firefox does not clip absolutely
+   * positioned nodes the same way; a hidden-but-present button must not count
+   * as available.
+   */
+  const isHittable = (node: HTMLElement): boolean => {
+    if (node.getClientRects().length === 0) {
+      return false;
+    }
+    const rect = node.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) {
+      return true;
+    }
+    const x = rect.left + rect.width / 2;
+    const y = rect.top + rect.height / 2;
+    if (x < 0 || y < 0 || x > window.innerWidth || y > window.innerHeight) {
+      return false;
+    }
+    let hit: Element | null = null;
+    try {
+      hit = document.elementFromPoint(x, y);
+    } catch {
+      return true;
+    }
+    if (!hit) {
+      return true;
+    }
+    return hit === node || node.contains(hit);
+  };
+
+  const composerKey = (actions: HTMLElement, form: HTMLElement | null): string => {
+    const keyOf = (node: Element | null): string => {
+      if (!(node instanceof HTMLElement) || node.getClientRects().length === 0) {
+        return "-";
+      }
+      const rect = node.getBoundingClientRect();
+      return `${Math.round(rect.left)},${Math.round(rect.top)},${Math.round(rect.width)},${Math.round(rect.height)}`;
+    };
+    return `${window.innerWidth}x${window.innerHeight}|${keyOf(form)}|${keyOf(actions)}`;
+  };
+
+  const showComposerFallback = (dock: HTMLElement | null): void => {
+    const dockVisible = dock !== null && isVisibleNode(dock) && isHittable(dock);
+    let container = document.querySelector<HTMLElement>('[data-ocvd="composer-fallback"]');
+    if (!container) {
+      container = document.createElement("div");
+      container.dataset.ocvd = "composer-fallback";
+    }
+    container.className = dockVisible
+      ? "ocvd-fallback-actions"
+      : "ocvd-floating-actions ocvd-floating-actions--fixed";
+
+    if (dockVisible && dock) {
+      if (container.parentElement !== dock) {
+        dock.appendChild(container);
+      }
+      if (window.getComputedStyle(dock).position === "static") {
+        dock.style.position = "relative";
+      }
+    } else if (container.parentElement !== document.documentElement) {
+      document.documentElement.appendChild(container);
+    }
+
+    const mic = takeButton('button[data-ocvd="composer-mic"]', () => makeMicButton("composer"));
+    const gear = takeButton('button[data-ocvd="composer-settings"]', makeGearButton);
+    if (gear.parentElement !== container || gear.nextElementSibling !== mic) {
+      container.append(gear, mic);
+    }
+    for (const extra of document.querySelectorAll<HTMLElement>('[data-ocvd="composer-fallback"]')) {
+      if (extra !== container) {
+        extra.remove();
+      }
+    }
+  };
+
   const injectComposer = (): void => {
     const actions = findComposerActions();
-    const existingMic = document.querySelector<HTMLButtonElement>(
-      'button[data-ocvd="composer-mic"]',
-    );
-    const existingGear = document.querySelector<HTMLButtonElement>(
-      'button[data-ocvd="composer-settings"]',
-    );
+    const editor = findComposerEditor();
+    const form = findComposerForm(editor);
+    const dock = findComposerDock();
     const fallback = document.querySelector<HTMLElement>('[data-ocvd="composer-fallback"]');
 
-    if (actions) {
-      if (isVisibleNode(existingMic) && !isVisibleNode(actions)) {
-        return;
-      }
-      removeNode(fallback);
-      if (existingMic && !actions.contains(existingMic)) {
-        existingMic.remove();
-      }
-      if (existingGear && !actions.contains(existingGear)) {
-        existingGear.remove();
-      }
+    if (!actions && !dock && !form) {
+      fallback?.remove();
+      document.querySelector('button[data-ocvd="composer-mic"]')?.remove();
+      document.querySelector('button[data-ocvd="composer-settings"]')?.remove();
+      blockedActions = null;
+      return;
+    }
 
-      const mic = dedupe(actions, 'button[data-ocvd="composer-mic"]') ?? makeMicButton("composer");
-      const gear = dedupe(actions, 'button[data-ocvd="composer-settings"]') ?? makeGearButton();
+    const blocked =
+      actions !== null &&
+      blockedActions?.node === actions &&
+      blockedActions.key === composerKey(actions, form) &&
+      blockedActions.until > Date.now();
+
+    if (
+      actions &&
+      !blocked &&
+      isVisibleNode(actions) &&
+      isOnScreen(actions) &&
+      isHittable(actions)
+    ) {
+      const mic = takeButton('button[data-ocvd="composer-mic"]', () => makeMicButton("composer"));
+      const gear = takeButton('button[data-ocvd="composer-settings"]', makeGearButton);
 
       const submit = actions.querySelector<HTMLElement>(SELECTORS.submit);
       const anchor = submit && submit !== mic && submit !== gear ? submit : null;
@@ -814,49 +926,37 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
       if (gear.parentElement !== actions || gear.nextElementSibling !== mic) {
         actions.insertBefore(gear, mic);
       }
-      return;
-    }
+      fallback?.remove();
 
-    const dock = findComposerDock();
-    const editor = findComposerEditor();
-    const form = findComposerForm(editor);
-    if (!dock && !form) {
-      return;
-    }
-    if (fallback?.isConnected) {
-      return;
-    }
-    if (existingMic) {
-      existingMic.remove();
-    }
-    if (existingGear) {
-      existingGear.remove();
-    }
-
-    const container = document.createElement("div");
-    container.dataset.ocvd = "composer-fallback";
-    container.append(makeGearButton(), makeMicButton("composer"));
-
-    if (dock) {
-      container.className = "ocvd-fallback-actions";
-      if (window.getComputedStyle(dock).position === "static") {
-        dock.style.position = "relative";
+      if (isVisibleNode(actions) && isOnScreen(actions) && isHittable(mic) && isHittable(gear)) {
+        blockedActions = null;
+        return;
       }
-      dock.appendChild(container);
+    }
+
+    // While a question is open, its dock owns the visible controls: a
+    // composer fallback would duplicate the question mic. The row buttons,
+    // if any, stay where they are and return when the question closes.
+    const questionOpen = [
+      ...document.querySelectorAll<HTMLElement>(
+        `${SELECTORS.questionDock}, ${SELECTORS.questionInput}`,
+      ),
+    ].some(isVisibleNode);
+    if (questionOpen) {
+      fallback?.remove();
+      blockedActions = null;
       return;
     }
 
-    const anchor = form?.parentElement ?? null;
-    container.className = "ocvd-floating-actions";
-    if (anchor) {
-      if (window.getComputedStyle(anchor).position === "static") {
-        anchor.style.position = "relative";
-      }
-      anchor.appendChild(container);
-    } else {
-      container.classList.add("ocvd-floating-actions--fixed");
-      document.documentElement.appendChild(container);
-    }
+    showComposerFallback(dock);
+
+    // Remember the layout only when the row itself is on screen but our
+    // buttons do not fit there. A row hidden by a transient overlay must be
+    // retried on the next heartbeat so the buttons return to it.
+    blockedActions =
+      actions && isVisibleNode(actions) && isOnScreen(actions) && isHittable(actions)
+        ? { node: actions, key: composerKey(actions, form), until: Date.now() + ROW_RETRY_MS }
+        : null;
   };
 
   const placeBesideField = (container: HTMLElement, wrapper: HTMLElement): void => {

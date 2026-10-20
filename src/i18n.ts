@@ -70,6 +70,7 @@ const ru = {
   "pipeline.submitFailed": "Не удалось отправить сообщение.",
   "pipeline.submitFailedSaved":
     "Не удалось отправить. Текст остался в поле ввода — можно повторить.",
+  "pipeline.agentBusy": "Агент ещё работает — текст вставлен. Отправьте его, когда агент завершит.",
   "pipeline.waitCurrent": "Дождитесь завершения текущей операции.",
   "pipeline.rawNotSaved": "Сырой текст не сохранён.",
   "pipeline.rawInserted": "Сырой текст вставлен. Можно отправить или повторить очистку.",
@@ -413,6 +414,8 @@ const en: Record<MessageKey, string> = {
   "pipeline.sent": "Sent.",
   "pipeline.submitFailed": "Could not send the message.",
   "pipeline.submitFailedSaved": "Could not send. The text is still in the input — you can retry.",
+  "pipeline.agentBusy":
+    "The agent is still working — the text is inserted. Send it when the agent finishes.",
   "pipeline.waitCurrent": "Wait for the current operation to finish.",
   "pipeline.rawNotSaved": "The raw text was not saved.",
   "pipeline.rawInserted": "Raw text inserted. You can submit it or retry cleanup.",

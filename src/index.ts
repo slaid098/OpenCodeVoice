@@ -3,6 +3,7 @@ import { isFirstRun, loadConfig, registerMenuCommands, saveConfig } from "./conf
 import { initI18n, resolveLocale, setLocale, t } from "./i18n.js";
 import {
   insertText,
+  isComposerSubmitBusy,
   isDraftChanged,
   isOpencodePage,
   isQuestionPromptOpen,
@@ -100,6 +101,7 @@ function setup(): void {
     insertText,
     replaceText,
     submitPrompt,
+    isSubmitBusy: isComposerSubmitBusy,
     isQuestionOpen: isQuestionPromptOpen,
     getSessionPath: () => window.location.pathname + window.location.search,
     rememberDraft,
