@@ -26,7 +26,7 @@ A free Groq key is available at [console.groq.com/keys](https://console.groq.com
 
 ## Notes
 
-- Requires OpenCode 2 (2.0.25+). Microphone access needs HTTPS or `localhost`.
+- Requires OpenCode 2 (2.0.25+). Browsers expose the microphone only in a secure context: HTTPS, or `localhost` / `127.0.0.1` on the same machine. Plain HTTP over a LAN IP does not work.
 - Audio goes to the configured STT provider; the transcript goes to the configured LLM provider. Nothing else leaves the browser.
 - API keys are stored unencrypted in userscript storage.
 - `401` means a key problem. `403` / `451` usually means the provider blocks your region — use **Custom URL** with a proxy or another STT service.
