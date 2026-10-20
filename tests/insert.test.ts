@@ -9,8 +9,10 @@ import {
   findQuestionInput,
   getSelectorStatus,
   insertText,
+  isDraftChanged,
   isOpencodePage,
   isQuestionPromptOpen,
+  rememberDraft,
   replaceText,
   resolveTarget,
   submitComposer,
@@ -314,6 +316,42 @@ describe("DOM detection", () => {
     expect(resolveTarget("composer")).toBe("composer");
     editor.closest(SELECTORS.composerDock)?.remove();
     expect(resolveTarget("question")).toBe("question");
+  });
+});
+
+describe("draft snapshot", () => {
+  it("detects changes in the composer draft", () => {
+    const { editor } = addComposer();
+    editor.textContent = "черновик";
+    rememberDraft("composer");
+    expect(isDraftChanged("composer")).toBe(false);
+
+    editor.textContent = "черновик и ещё";
+    expect(isDraftChanged("composer")).toBe(true);
+  });
+
+  it("detects changes in the question field", () => {
+    const { field } = addQuestion();
+    field.value = "ответ";
+    rememberDraft("question");
+    expect(isDraftChanged("question")).toBe(false);
+
+    field.value = "другой ответ";
+    expect(isDraftChanged("question")).toBe(true);
+  });
+
+  it("ignores a different target", () => {
+    addComposer();
+    addQuestion();
+    rememberDraft("composer");
+    expect(isDraftChanged("question")).toBe(false);
+  });
+
+  it("reports no change when there was no draft to remember", () => {
+    rememberDraft("composer");
+    expect(isDraftChanged("composer")).toBe(false);
+    addComposer();
+    expect(isDraftChanged("composer")).toBe(false);
   });
 });
 

@@ -220,6 +220,35 @@ export function resolveTarget(preferred: InsertTarget): InsertTarget {
   return preferred;
 }
 
+interface DraftSnapshot {
+  target: InsertTarget;
+  text: string;
+}
+
+let draftSnapshot: DraftSnapshot | null = null;
+
+function readDraftText(target: InsertTarget): string | null {
+  if (target === "question") {
+    const field = findQuestionInput();
+    return field ? field.value : null;
+  }
+  const editor = findComposerEditor();
+  return editor ? (editor.textContent ?? "") : null;
+}
+
+export function rememberDraft(target: InsertTarget = "composer"): void {
+  const text = readDraftText(target);
+  draftSnapshot = text === null ? null : { target, text };
+}
+
+export function isDraftChanged(target: InsertTarget = "composer"): boolean {
+  if (!draftSnapshot || draftSnapshot.target !== target) {
+    return false;
+  }
+  const text = readDraftText(target);
+  return text !== null && text !== draftSnapshot.text;
+}
+
 export function insertText(text: string, target: InsertTarget = "composer"): boolean {
   const resolved = resolveTarget(target);
   if (resolved === "question") {

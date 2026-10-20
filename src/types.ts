@@ -84,6 +84,8 @@ export interface FailedDictation {
   updatedAt: number;
   target: InsertTarget;
   stage: FailureStage;
+  /** Page path where the recording started, e.g. `/server/x/session/y`. */
+  originPath?: string;
   audio?: ArrayBuffer;
   audioMimeType?: string;
   rawText?: string;

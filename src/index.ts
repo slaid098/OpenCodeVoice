@@ -3,8 +3,10 @@ import { isFirstRun, loadConfig, registerMenuCommands, saveConfig } from "./conf
 import { initI18n, resolveLocale, setLocale, t } from "./i18n.js";
 import {
   insertText,
+  isDraftChanged,
   isOpencodePage,
   isQuestionPromptOpen,
+  rememberDraft,
   replaceText,
   resolveTarget,
   submitPrompt,
@@ -99,6 +101,9 @@ function setup(): void {
     replaceText,
     submitPrompt,
     isQuestionOpen: isQuestionPromptOpen,
+    getSessionPath: () => window.location.pathname + window.location.search,
+    rememberDraft,
+    isDraftChanged,
     store: storageAdapter,
     ui: pipelineUi,
   });
@@ -109,6 +114,9 @@ function setup(): void {
     },
     onCancel: () => {
       void pipeline?.cancel();
+    },
+    onStop: () => {
+      void pipeline?.stop();
     },
     onOpenSettings: () => settings?.open(),
   });

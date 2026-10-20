@@ -86,9 +86,9 @@ export function createSettingsPanel(deps: SettingsPanelDeps): SettingsPanel {
   const scriptVersion = (): string => {
     try {
       const version = GM_info?.script?.version;
-      return typeof version === "string" && version !== "" ? version : "0.9.0";
+      return typeof version === "string" && version !== "" ? version : "0.9.1";
     } catch {
-      return "0.9.0";
+      return "0.9.1";
     }
   };
 
@@ -363,8 +363,8 @@ export function createSettingsPanel(deps: SettingsPanelDeps): SettingsPanel {
 }
 .sheet {
   width: min(760px, 100%);
-  max-height: 92vh;
-  max-height: 92dvh;
+  height: 92vh;
+  height: 92dvh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -438,6 +438,7 @@ export function createSettingsPanel(deps: SettingsPanelDeps): SettingsPanel {
   -webkit-overflow-scrolling: touch;
   padding: 14px 16px 22px;
   flex: 1 1 auto;
+  min-height: 0;
 }
 .section { margin-bottom: 20px; }
 .section:last-child { margin-bottom: 0; }
@@ -468,6 +469,10 @@ export function createSettingsPanel(deps: SettingsPanelDeps): SettingsPanel {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--field-focus);
 }
+.select option {
+  background: var(--bg);
+  color: var(--fg);
+}
 .input::placeholder, .textarea::placeholder { color: var(--muted); }
 .textarea { min-height: 84px; resize: vertical; line-height: 1.45; }
 .prompt-textarea { min-height: 190px; }
@@ -492,6 +497,7 @@ export function createSettingsPanel(deps: SettingsPanelDeps): SettingsPanel {
   cursor: pointer;
   touch-action: manipulation;
   flex: 0 0 auto;
+  white-space: nowrap;
 }
 .inline-btn:hover, .secondary-btn:hover { background: rgba(127, 127, 127, 0.14); }
 .inline-btn:focus-visible, .secondary-btn:focus-visible {
@@ -579,6 +585,7 @@ export function createSettingsPanel(deps: SettingsPanelDeps): SettingsPanel {
   cursor: pointer;
   touch-action: manipulation;
   flex: 0 0 auto;
+  white-space: nowrap;
 }
 .primary-btn:hover { filter: brightness(1.08); }
 .primary-btn:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
@@ -615,9 +622,35 @@ export function createSettingsPanel(deps: SettingsPanelDeps): SettingsPanel {
 @media (pointer: coarse) {
   .primary-btn { min-height: 50px; }
 }
+@media (max-width: 520px) {
+  .tabs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    overflow-x: visible;
+  }
+  .tab {
+    min-width: 0;
+    padding: 0 8px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+@media (max-width: 480px) {
+  .password-row, .model-row { flex-wrap: wrap; }
+  .password-row .input, .model-row .input { flex: 1 1 100%; }
+  .password-row .inline-btn, .model-row .inline-btn { flex: 1 1 100%; }
+  .footer { flex-wrap: wrap; }
+  .footer-status { flex: 1 1 100%; }
+  .primary-btn { flex: 1 1 100%; min-width: 0; }
+}
 @media (min-width: 760px) {
   .backdrop { align-items: center; padding: 24px; }
-  .sheet { border-radius: 16px; max-height: 86vh; max-height: 86dvh; }
+  .sheet {
+    border-radius: 16px;
+    height: min(86vh, 760px);
+    height: min(86dvh, 760px);
+  }
 }
 `;
     const backdrop = element("div", "backdrop");

@@ -3,12 +3,12 @@ module: src
 purpose: Исходники userscript — UI OpenCode 2, аудио, STT, очистка LLM, пайплайн, i18n и восстановление
 key_files:
   - src/index.ts — bootstrap userscript
-  - src/pipeline.ts — state machine диктовки
+  - src/pipeline.ts — state machine диктовки, защита сессии и черновика
   - src/i18n.ts — словари RU/EN и текущая локаль
   - src/config.ts — конфиг v2, пресеты, миграция 1.x
-  - src/insert.ts — селекторы OpenCode 2, вставка и отправка
-  - src/ui.ts — кнопки микрофона/настроек, mobile CSS, heartbeat, тосты, recovery-баннер
-  - src/settings-panel.ts — мобильная панель настроек (Shadow DOM)
+  - src/insert.ts — селекторы OpenCode 2, вставка, отправка, снимок черновика
+  - src/ui.ts — кнопки микрофона/настроек, mobile CSS, компактная плашка, heartbeat, тосты, recovery-баннер
+  - src/settings-panel.ts — мобильная панель настроек (Shadow DOM), адаптивные вкладки
   - src/http.ts — GM_xmlhttpRequest, retry/backoff
   - src/transcribe.ts — STT-провайдеры и классификация 403
   - src/llm.ts — очистка текста через LLM
@@ -27,7 +27,7 @@ last_updated: 2026-10-20
 
 - `index.ts` — bootstrap: `isOpencodePage()` gate, `waitForOpencode()`, `initI18n()`, регистрация меню, создание панели настроек, UI, keyboard, `pipeline.recover()`, первый запуск без ключа/endpoint-а.
 - `i18n.ts` — словари `ru`/`en` с одинаковым `MessageKey`, `t`, `translate`, `resolveLocale` (`auto` → RU для `ru*`, иначе EN), `initI18n`/`setLocale`/`getLocale`/`resetI18n`, `MESSAGE_KEYS`.
-- `pipeline.ts` — state machine `idle → recording → stt → llm → insert → submit`; `toggle`, `cancel`, `retryLast`, `recover`, `forget`. Зависимости (recorder, transcribe, cleanup, insert, submit, storage, UI) инжектируются через `createPipeline`.
+- `pipeline.ts` — state machine `idle → recording → stt → llm → insert → submit`; `toggle`, `cancel`, `retryLast`, `recover`, `forget`. Зависимости (recorder, transcribe, cleanup, insert, submit, storage, UI) инжектируются через `createPipeline`. `start()` запоминает `originPath` и снимок черновика; `sessionChanged()` проверяется перед вставкой, отправкой и аварийной вставкой сырого текста; изменённый черновик отменяет автоотправку, но не вставку. Recovery-баннер переиспользуется для сохранённого текста.
 - `config.ts` — `ocvd.config.v2` (одна JSON-строка), `createDefaultConfig(locale)`, `loadConfig`/`saveConfig`, `normalizeConfig`, `validateConfig(config, locale)`, пресеты `STT_PRESETS` (`groq`/`custom`) и `LLM_PRESETS`, `DEFAULT_CLEANUP_PROMPT_RU`/`_EN`, `LEGACY_OPENAI_STT`, миграция 1.x, `resolveSttEndpoint`/`resolveSttModel`, `applySttPreset`, 4 menu commands.
 - `types.ts` — `AppConfig` (`ui`, `stt`, `llm`, `behavior`, `retry`), `Locale`/`LocalePreference`, `FailedDictation`, `CleanupResult`, `SelectorStatus`.
 - `http.ts` — обёртка `GM_xmlhttpRequest`: `httpRequest`, `withRetry`, `HttpError`, `AbortError`, `Retry-After`, таймауты.
@@ -35,9 +35,9 @@ last_updated: 2026-10-20
 - `llm.ts` — Ollama native `/api/chat` (`think`) и OpenAI-compatible `/v1/chat/completions` (`reasoning_effort`); `validateCleanup` с fallback на сырой текст.
 - `models.ts` — `listSttModels`/`listLlmModels`: Ollama `/api/tags`, OpenAI `/v1/models`, обработка 404/405; для 403 использует общую классификацию региона.
 - `storage.ts` — IndexedDB `opencode-voice-dictation` / `failures`; аудио как `ArrayBuffer`; prune (5 записей, 7 дней), quota handling, `requestPersistence`.
-- `insert.ts` — `SELECTORS` OpenCode 2, legacy fallback, `resolveTarget`, `insertText`/`replaceText`, `submitPrompt`, `submitQuestion`, `getSelectorStatus`; актуальное поле вопроса — `input[data-slot="text-input-v2-input"]` в `[data-slot="question-option"][data-custom="true"]`, legacy — `textarea[data-slot="question-custom-input"]`; отправка вопроса — последняя включённая кнопка `[data-slot="question-footer-actions"]`.
-- `ui.ts` — идемпотентная инъекция mic/gear в `composer-actions` (или fallback-ряд) и контейнеры вопроса (футер → header actions → custom option → legacy form); плавающая кнопка над формой композера; mobile CSS (`@media (max-width: 767px)`); heartbeat раз в секунду при видимой вкладке; тост, recovery-баннер, Shadow DOM hosts.
-- `settings-panel.ts` — bottom sheet с вкладками STT / Очистка / Поведение / Диагностика; провайдер STT (`Whisper (Groq)` / `Custom URL`), язык интерфейса, загрузка моделей, проверки подключения, редактируемый промпт.
+- `insert.ts` — `SELECTORS` OpenCode 2, legacy fallback, `resolveTarget`, `insertText`/`replaceText`, `submitPrompt`, `submitQuestion`, `getSelectorStatus`, `rememberDraft`/`isDraftChanged`; актуальное поле вопроса — `input[data-slot="text-input-v2-input"]` в `[data-slot="question-option"][data-custom="true"]`, legacy — `textarea[data-slot="question-custom-input"]`; отправка вопроса — последняя включённая кнопка `[data-slot="question-footer-actions"]`.
+- `ui.ts` — идемпотентная инъекция mic/gear в `composer-actions` (или fallback-ряд) и контейнеры вопроса (футер → header actions → custom option → legacy form); плавающая кнопка над формой композера; mobile CSS (`@media (max-width: 767px)`); компактная плашка записи с точкой, таймером, стопом и отменой; микрофон остаётся микрофоном с пульсирующей красной точкой; heartbeat раз в секунду при видимой вкладке; тост, recovery-баннер, Shadow DOM hosts.
+- `settings-panel.ts` — bottom sheet с вкладками STT / Очистка / Поведение / Диагностика; фиксированная высота, сброс прокрутки при смене вкладки, сетка вкладок 2×2 на узком экране, перенос строк и полноширинные кнопки; провайдер STT (`Whisper (Groq)` / `Custom URL`), язык интерфейса, загрузка моделей, проверки подключения, редактируемый промпт; явные цвета `option` для читаемого списка провайдеров.
 - `audio.ts` — `MediaRecorder`, MIME webm/opus → webm → mp4, `stop` с 3-секундным таймаутом, `cancel`.
 - `keyboard.ts` — `Ctrl+Space` toggle, `Escape` cancel; игнорирует `repeat`/`isComposing`, не срабатывает при открытой панели.
 
@@ -54,3 +54,6 @@ last_updated: 2026-10-20
 - 403 классифицируется как ключ → регион → общий forbidden; прокси с неверным ключом не получает ложное сообщение о регионе.
 - Сетевые ошибки проходят через `withRetry`; ключи и тела запросов не логируются.
 - Пайплайн не зависит от DOM и тестируется с fake-зависимостями.
+- Перед вставкой и отправкой пайплайн сверяет `originPath` с текущим путём страницы (`pathname + search`); при смене сессии текст сохраняется и показывается в recovery-баннере, а не уходит в чужой чат.
+- Снимок черновика (`rememberDraft`) сравнивается перед вставкой (`isDraftChanged`): изменённый черновик отменяет только автоотправку, текст всё равно вставляется.
+- После успешной вставки `rawInserted = true`, поэтому повторное восстановление предлагает отправку, а не повторную вставку.

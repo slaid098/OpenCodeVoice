@@ -213,7 +213,7 @@ describe("opening and closing", () => {
     expect(sheet.getAttribute("role")).toBe("dialog");
     expect(sheet.getAttribute("aria-modal")).toBe("true");
     expect(root().querySelector(".title")?.textContent).toBe("Голосовой ввод");
-    expect(root().querySelector(".subtitle")?.textContent).toBe("OpenCode 2 · v0.9.0");
+    expect(root().querySelector(".subtitle")?.textContent).toBe("OpenCode 2 · v0.9.1");
     expect(root().querySelector('.tab[data-tab="stt"]')?.getAttribute("aria-selected")).toBe(
       "true",
     );
@@ -294,6 +294,30 @@ describe("tabs and draft", () => {
     openTab("diagnostics");
     expect(root().textContent).toContain("Селекторы OpenCode 2");
     expect(root().textContent).toContain("Хранилище IndexedDB");
+  });
+
+  it("resets the content scroll when switching tabs", () => {
+    openPanel();
+    const content = must(root().querySelector<HTMLElement>(".content"), "content");
+    content.scrollTop = 180;
+    openTab("llm");
+    expect(content.scrollTop).toBe(0);
+  });
+
+  it("keeps a stable sheet height and adapts to narrow screens", () => {
+    openPanel();
+    const css = root().querySelector("style")?.textContent ?? "";
+    expect(css).toContain("height: 92dvh");
+    expect(css).toContain("height: min(86dvh, 760px)");
+    expect(css).not.toContain("max-height: 86dvh");
+    expect(css).toContain("@media (max-width: 520px)");
+    expect(css).toContain("grid-template-columns: repeat(2, minmax(0, 1fr))");
+    expect(css).toContain("@media (max-width: 480px)");
+    expect(css).toContain(".footer-status { flex: 1 1 100%; }");
+    expect(css).toContain(".primary-btn { flex: 1 1 100%; min-width: 0; }");
+    expect(css).toContain(".select option");
+    expect(css).toContain("background: var(--bg);");
+    expect(css).toContain("color: var(--fg);");
   });
 
   it("keeps draft changes when switching tabs", () => {
@@ -828,7 +852,7 @@ describe("diagnostics tab", () => {
     await vi.waitFor(() => {
       expect(root().textContent).toContain("Сохранённых ошибок нет.");
     });
-    expect(root().textContent).toContain("0.9.0");
+    expect(root().textContent).toContain("0.9.1");
     expect(root().textContent).toContain("не обнаружена");
     expect(root().textContent).toContain("Composer dock");
     expect(root().textContent).toContain("Микрофон в композере");

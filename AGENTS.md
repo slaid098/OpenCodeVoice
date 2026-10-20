@@ -77,6 +77,30 @@ Selector status (including whether each mic is present and visible) is exposed i
 
 The narrow-screen fix lives entirely inside `@media (max-width: 767px)` in `ensureStyle()` (`src/ui.ts`). The model title gets `flex: 1 1 0; min-width: 0` and truncates with an ellipsis, while the agent and variant buttons keep `flex: 0 0 auto`. Do NOT replace this with `position: sticky` — it was explicitly rejected, and desktop styles must remain untouched. Keep the `:has([data-action="composer-model"])` selector and the direct-child fallback.
 
+## Session and draft guards
+
+Auto-submit is global, on by default, and is the primary mode. Do NOT add per-recording "review/send" modes or a new history screen: saved text uses the existing recovery banner and the "Retry last dictation" menu command.
+
+- `pipeline.start()` stores `originPath = getSessionPath()` (`window.location.pathname + window.location.search`, i.e. `/server/:serverKey/session/:id`). `FailedDictation.originPath` is persisted with the record.
+- `sessionChanged(record)` must be checked before insertion (`runInsert`), before submission (`runSubmit`), and in the `runLlm` cleanup-failure branch that inserts raw text. On mismatch nothing is inserted or submitted; the record is saved with stage `insert`/`submit`, the recovery banner is shown, and a toast explains what happened.
+- Manual recovery (`insertRaw`) is an explicit user action: it inserts into the current field using `record.cleanText || record.rawText`, so a recognized-but-not-inserted text is still available after switching back.
+- `rawInserted = true` after any successful insertion (normal or manual). It prevents duplicate insertion: the next recovery offers "Submit" instead of "Insert text". `submitRaw()` keeps `cleanText` (`record.cleanText = record.cleanText || record.rawText`).
+- `rememberDraft(target)` snapshots the composer editor text or question input value at recording start; `isDraftChanged(target)` compares it before insertion. If the draft changed and auto-submit is on, insert the text but skip submission and show a toast. With auto-submit off, behavior is unchanged.
+- Draft comparison is plain text equality, not caret position or selection; cursor insertion and selection replacement are out of scope for now.
+
+## Compact recording UI
+
+- The recording status is a fit-content pill: red dot + timer (`01:05`), 30×30 stop button (red square) and 30×30 cancel button (×). Stop and cancel are inside the pill, away from OpenCode's agent-stop button. `UiOptions.onStop` calls `pipeline.stop()`.
+- The composer mic stays a mic during recording (`aria-label` "Остановить запись", red pulsing dot via `::after`); it is not replaced by a red square. Only processing phases replace the icon with a spinner.
+- Keep the pill above the composer at the existing safe-area offset; do not move or cover OpenCode controls.
+
+## Settings panel layout
+
+- The sheet has a fixed height, not `max-height`: `92dvh` on mobile and `min(86dvh, 760px)` from 760 px. Tab switching must not move the top edge.
+- `renderContent()` resets `contentEl.scrollTop` so a new tab opens at the top.
+- At `max-width: 520px` the four tabs are a 2×2 grid (no horizontal scroll); at `max-width: 480px` the password/model rows and footer wrap, inputs and the Save button take the full width. Buttons use `white-space: nowrap`.
+- Native `<option>` elements need explicit `background: var(--bg)` and `color: var(--fg)`; without it provider names can be white-on-white in the light theme.
+
 ## Mic re-injection
 
 `handleMutations()` schedules `inject()` when foreign nodes are added **and** when an Element containing our nodes was removed and is no longer connected. This covers OpenCode deleting only our button without adding anything else. A 1-second heartbeat (`setInterval`, only while `document.visibilityState === "visible"`) is the last-resort safety net; `inject()` must stay idempotent so the heartbeat does not move nodes. Do not remove the heartbeat without an equally reliable replacement. When an existing mic is visible but the target container is temporarily invisible, leave the mic in place instead of removing it.
@@ -106,11 +130,11 @@ Coverage thresholds: **70%** (statements/branches/functions/lines).
 - `transcribe.ts` — STT providers (`groq` Whisper / `custom` OpenAI-compatible), response parsing, 403 classification, retry policy
 - `llm.ts` — Ollama native and OpenAI-compatible cleanup, prompt handling, response sanitization/fallback
 - `models.ts` — model list loading for STT and LLM
-- `pipeline.ts` — recording → STT → LLM → insert → submit state machine, retry/cancel/recover
+- `pipeline.ts` — recording → STT → LLM → insert → submit state machine, retry/cancel/recover, session guard (`originPath`) and draft guard (`rememberDraft`/`isDraftChanged`)
 - `storage.ts` — IndexedDB failure store (`failures`, audio as `ArrayBuffer`), prune, persistence
-- `insert.ts` — OpenCode 2 selectors, caret insertion, footer-button question submit, legacy fallbacks
-- `ui.ts` — idempotent mic/gear injection into composer/question docks, mobile CSS, heartbeat, toast, recovery banner
-- `settings-panel.ts` — Shadow DOM bottom sheet (STT / Cleanup / Behavior / Diagnostics), interface language selector
+- `insert.ts` — OpenCode 2 selectors, caret insertion, footer-button question submit, legacy fallbacks, draft snapshot (`rememberDraft`/`isDraftChanged`)
+- `ui.ts` — idempotent mic/gear injection into composer/question docks, mobile CSS, compact recording pill, heartbeat, toast, recovery banner
+- `settings-panel.ts` — Shadow DOM bottom sheet (STT / Cleanup / Behavior / Diagnostics), fixed height, responsive tabs/rows, interface language selector
 - `keyboard.ts` — Ctrl+Space toggle, Escape cancel
 
 Never log API keys or request bodies. Error messages must redact credentials. Secrets live only in GM storage (userscript) and are not encrypted at rest — document this in user-facing docs.

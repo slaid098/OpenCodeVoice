@@ -39,7 +39,7 @@ const ru = {
   "ui.recovery.title": "Незавершённая диктовка · {stage}",
   "ui.recovery.fallbackError": "Последняя операция не завершилась.",
   "ui.recovery.submitRaw": "Отправить как есть",
-  "ui.recovery.insertRaw": "Вставить сырой текст",
+  "ui.recovery.insertRaw": "Вставить текст",
   "ui.recovery.delete": "Удалить",
   "ui.settingsLabel": "Настройки голосового ввода",
 
@@ -78,6 +78,16 @@ const ru = {
   "pipeline.savedDeleted": "Сохранённая запись удалена.",
   "pipeline.cancelled": "Отменено.",
   "pipeline.waitProcessing": "Дождитесь завершения обработки.",
+  "pipeline.sessionChanged": "Сессия изменилась во время распознавания — текст сохранён.",
+  "pipeline.sessionChangedToast":
+    "Сессия изменилась — текст сохранён. Вернитесь в нужную сессию и нажмите «Вставить текст».",
+  "pipeline.sessionChangedAfterInsert": "Текст вставлен, но сессия уже изменилась.",
+  "pipeline.sessionChangedAfterInsertToast":
+    "Текст вставлен, но сессия изменилась — проверьте и отправьте вручную.",
+  "pipeline.draftChanged":
+    "Во время распознавания вы изменили текст — проверьте и отправьте вручную.",
+  "pipeline.textInserted": "Текст вставлен. Можно отправить.",
+  "pipeline.sendNow": "Отправить",
   "pipeline.cleanupReason.refusal": "LLM отказался обрабатывать текст — использован сырой текст.",
   "pipeline.cleanupReason.tooLong": "LLM вернул слишком длинный текст — использован сырой.",
   "pipeline.cleanupReason.empty": "LLM вернул пустой текст — использован сырой.",
@@ -371,7 +381,7 @@ const en: Record<MessageKey, string> = {
   "ui.recovery.title": "Unfinished dictation · {stage}",
   "ui.recovery.fallbackError": "The last operation did not finish.",
   "ui.recovery.submitRaw": "Submit as is",
-  "ui.recovery.insertRaw": "Insert raw text",
+  "ui.recovery.insertRaw": "Insert text",
   "ui.recovery.delete": "Delete",
   "ui.settingsLabel": "Voice input settings",
 
@@ -411,6 +421,17 @@ const en: Record<MessageKey, string> = {
   "pipeline.savedDeleted": "The saved recording was deleted.",
   "pipeline.cancelled": "Cancelled.",
   "pipeline.waitProcessing": "Wait for processing to finish.",
+  "pipeline.sessionChanged": "The session changed during transcription — the text was saved.",
+  "pipeline.sessionChangedToast":
+    "The session changed — the text was saved. Return to the right session and press “Insert text”.",
+  "pipeline.sessionChangedAfterInsert":
+    "The text was inserted, but the session has already changed.",
+  "pipeline.sessionChangedAfterInsertToast":
+    "The text was inserted, but the session changed — review and submit it manually.",
+  "pipeline.draftChanged":
+    "You edited the text during transcription — review and submit it manually.",
+  "pipeline.textInserted": "Text inserted. You can submit it.",
+  "pipeline.sendNow": "Submit",
   "pipeline.cleanupReason.refusal": "The LLM refused to process the text — raw text was used.",
   "pipeline.cleanupReason.tooLong": "The LLM returned text that is too long — raw text was used.",
   "pipeline.cleanupReason.empty": "The LLM returned empty text — raw text was used.",

@@ -16,6 +16,7 @@ import type { DictationPhase, FailedDictation, InsertTarget } from "./types.js";
 
 export interface UiOptions {
   onToggle: (target: InsertTarget) => void;
+  onStop: () => void;
   onCancel: () => void;
   onOpenSettings: () => void;
 }
@@ -70,6 +71,8 @@ export function createUi(options: UiOptions): Ui {
   let statusEl: HTMLElement | null = null;
   let statusIconEl: HTMLElement | null = null;
   let statusTextEl: HTMLElement | null = null;
+  let stopButton: HTMLButtonElement | null = null;
+  let cancelButton: HTMLButtonElement | null = null;
   let toastEl: HTMLElement | null = null;
   let recoveryEl: HTMLElement | null = null;
 
@@ -101,15 +104,25 @@ button.ocvd-btn {
   user-select: none;
   flex: 0 0 auto;
   vertical-align: middle;
+  position: relative;
 }
 button.ocvd-btn:hover { background: rgba(127, 127, 127, 0.14); }
 button.ocvd-btn:focus-visible { outline: 2px solid #60a5fa; outline-offset: 2px; }
 button.ocvd-btn[disabled] { opacity: 0.55; cursor: default; background: transparent; }
-button.ocvd-btn.ocvd-btn--recording {
-  color: #ef4444;
-  background: rgba(239, 68, 68, 0.16);
+button.ocvd-btn.ocvd-btn--recording { color: #ef4444; }
+button.ocvd-btn.ocvd-btn--recording:hover { background: rgba(239, 68, 68, 0.14); }
+button.ocvd-btn.ocvd-btn--recording::after {
+  content: "";
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ef4444;
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.25);
+  animation: ocvd-mic-pulse 1.2s ease-in-out infinite;
 }
-button.ocvd-btn.ocvd-btn--recording:hover { background: rgba(239, 68, 68, 0.24); }
 button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
 .ocvd-spinner {
   width: 18px;
@@ -190,6 +203,7 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
   }
 }
 @keyframes ocvd-spin-page { to { transform: rotate(360deg); } }
+@keyframes ocvd-mic-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
 `;
     document.documentElement.appendChild(style);
   };
@@ -227,7 +241,7 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
   display: flex;
   flex-direction: column;
   gap: 8px;
-  align-items: stretch;
+  align-items: center;
 }
 .ocvd-status, .ocvd-toast, .ocvd-recovery {
   pointer-events: auto;
@@ -240,8 +254,12 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
 .ocvd-status {
   display: flex;
   align-items: center;
-  gap: 10px;
-  min-height: 48px;
+  gap: 8px;
+  width: fit-content;
+  max-width: 100%;
+  min-height: 36px;
+  padding: 3px 5px 3px 12px;
+  border-radius: 999px;
 }
 .ocvd-status[hidden], .ocvd-toast[hidden], .ocvd-recovery[hidden] { display: none; }
 .ocvd-status-icon { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; flex: 0 0 auto; }
@@ -261,8 +279,41 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
   border-radius: 50%;
   animation: ocvd-spin 0.8s linear infinite;
 }
-.ocvd-status-text { flex: 1 1 auto; font-weight: 500; font-variant-numeric: tabular-nums; }
-.ocvd-cancel, .ocvd-btn {
+.ocvd-status-text {
+  flex: 0 1 auto;
+  min-width: 0;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.ocvd-stop, .ocvd-cancel {
+  all: unset;
+  box-sizing: border-box;
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: inherit;
+  cursor: pointer;
+  touch-action: manipulation;
+  user-select: none;
+  flex: 0 0 auto;
+}
+.ocvd-stop { color: #ef4444; background: rgba(239, 68, 68, 0.16); }
+.ocvd-stop:hover { background: rgba(239, 68, 68, 0.26); }
+.ocvd-stop[hidden] { display: none; }
+.ocvd-stop svg { width: 16px; height: 16px; display: block; }
+.ocvd-cancel { color: rgba(255, 255, 255, 0.72); font-size: 20px; line-height: 1; }
+.ocvd-cancel:hover { background: rgba(255, 255, 255, 0.12); color: #fff; }
+.ocvd-stop:focus-visible, .ocvd-cancel:focus-visible {
+  outline: 2px solid #60a5fa;
+  outline-offset: 2px;
+}
+.ocvd-btn {
   all: unset;
   box-sizing: border-box;
   display: inline-flex;
@@ -279,8 +330,8 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
   touch-action: manipulation;
   user-select: none;
 }
-.ocvd-cancel:hover, .ocvd-btn:hover { background: rgba(255, 255, 255, 0.17); }
-.ocvd-cancel:focus-visible, .ocvd-btn:focus-visible { outline: 2px solid #60a5fa; outline-offset: 2px; }
+.ocvd-btn:hover { background: rgba(255, 255, 255, 0.17); }
+.ocvd-btn:focus-visible { outline: 2px solid #60a5fa; outline-offset: 2px; }
 .ocvd-toast {
   display: flex;
   align-items: center;
@@ -347,8 +398,12 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
   .ocvd-status, .ocvd-toast, .ocvd-recovery { background: rgba(255, 255, 255, 0.98); border-color: rgba(0, 0, 0, 0.14); }
   .ocvd-recovery-text { color: rgba(17, 24, 39, 0.85); }
   .ocvd-recovery-time { color: rgba(17, 24, 39, 0.55); }
-  .ocvd-cancel, .ocvd-btn { background: rgba(17, 24, 39, 0.08); }
-  .ocvd-cancel:hover, .ocvd-btn:hover { background: rgba(17, 24, 39, 0.14); }
+  .ocvd-btn { background: rgba(17, 24, 39, 0.08); }
+  .ocvd-btn:hover { background: rgba(17, 24, 39, 0.14); }
+  .ocvd-stop { background: rgba(239, 68, 68, 0.14); }
+  .ocvd-stop:hover { background: rgba(239, 68, 68, 0.22); }
+  .ocvd-cancel { color: rgba(17, 24, 39, 0.6); }
+  .ocvd-cancel:hover { background: rgba(17, 24, 39, 0.08); color: #111827; }
   .ocvd-close { color: rgba(17, 24, 39, 0.6); }
   .ocvd-close:hover { background: rgba(17, 24, 39, 0.08); color: #111827; }
   .ocvd-btn--danger { color: #991b1b; }
@@ -371,12 +426,20 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
     statusIconEl.className = "ocvd-status-icon";
     statusTextEl = document.createElement("span");
     statusTextEl.className = "ocvd-status-text";
-    const cancelButton = document.createElement("button");
+
+    stopButton = document.createElement("button");
+    stopButton.type = "button";
+    stopButton.className = "ocvd-stop";
+    stopButton.appendChild(stopIcon());
+    stopButton.addEventListener("click", () => options.onStop());
+
+    cancelButton = document.createElement("button");
     cancelButton.type = "button";
     cancelButton.className = "ocvd-cancel";
-    cancelButton.textContent = t("common.cancel");
+    cancelButton.textContent = "×";
     cancelButton.addEventListener("click", () => options.onCancel());
-    statusEl.append(statusIconEl, statusTextEl, cancelButton);
+
+    statusEl.append(statusIconEl, statusTextEl, stopButton, cancelButton);
 
     toastEl = document.createElement("div");
     toastEl.className = "ocvd-toast";
@@ -485,9 +548,7 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
     button.classList.toggle("ocvd-btn--recording", phase === "recording");
     button.setAttribute("aria-label", label);
     button.setAttribute("title", label);
-    if (phase === "recording") {
-      button.appendChild(stopIcon());
-    } else if (phase === "idle") {
+    if (phase === "recording" || phase === "idle") {
       button.appendChild(micIcon());
     } else {
       button.appendChild(spinner());
@@ -508,6 +569,7 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
     }
     if (phase === "idle") {
       statusEl.hidden = true;
+      statusEl.removeAttribute("aria-label");
       return;
     }
     statusEl.hidden = false;
@@ -516,10 +578,25 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
       const dot = document.createElement("span");
       dot.className = "ocvd-dot";
       statusIconEl.appendChild(dot);
-      statusTextEl.textContent = `${t(PHASE_KEY.recording)} ${formatTime(elapsedSeconds)}`;
+      const time = formatTime(elapsedSeconds);
+      statusTextEl.textContent = time;
+      statusEl.setAttribute("aria-label", `${t(PHASE_KEY.recording)} ${time}`);
     } else {
       statusIconEl.appendChild(spinner());
       statusTextEl.textContent = t(PHASE_KEY[phase]);
+      statusEl.removeAttribute("aria-label");
+    }
+
+    if (stopButton) {
+      stopButton.hidden = phase !== "recording";
+      const stopLabel = t("ui.mic.stop");
+      stopButton.setAttribute("aria-label", stopLabel);
+      stopButton.title = stopLabel;
+    }
+    if (cancelButton) {
+      const cancelLabel = t("common.cancel");
+      cancelButton.setAttribute("aria-label", cancelLabel);
+      cancelButton.title = cancelLabel;
     }
   };
 
@@ -984,6 +1061,8 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
     statusEl = null;
     statusIconEl = null;
     statusTextEl = null;
+    stopButton = null;
+    cancelButton = null;
     toastEl = null;
     recoveryEl = null;
     document.getElementById(STYLE_ID)?.remove();

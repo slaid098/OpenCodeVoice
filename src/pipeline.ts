@@ -59,6 +59,9 @@ export interface PipelineDeps {
   replaceText: (text: string, target: InsertTarget) => boolean;
   submitPrompt: (target: InsertTarget) => boolean;
   isQuestionOpen: () => boolean;
+  getSessionPath: () => string;
+  rememberDraft: (target: InsertTarget) => void;
+  isDraftChanged: (target: InsertTarget) => boolean;
   store: FailureStore;
   ui: PipelineUi;
   now?: () => number;
@@ -89,6 +92,7 @@ export function createPipeline(deps: PipelineDeps): Pipeline {
   let elapsed = 0;
   let token = 0;
   let persistenceRequested = false;
+  let originPath: string | null = null;
 
   const now = (): number => deps.now?.() ?? Date.now();
   const newId = (): string =>
@@ -152,11 +156,45 @@ export function createPipeline(deps: PipelineDeps): Pipeline {
     };
   };
 
+  const sessionChanged = (record: FailedDictation): boolean =>
+    typeof record.originPath === "string" &&
+    record.originPath !== "" &&
+    record.originPath !== deps.getSessionPath();
+
+  const failSessionChanged = async (
+    record: FailedDictation,
+    localToken: number,
+    stage: "insert" | "submit",
+  ): Promise<void> => {
+    record.stage = stage;
+    record.error = t(
+      stage === "insert" ? "pipeline.sessionChanged" : "pipeline.sessionChangedAfterInsert",
+    );
+    record.attempts += 1;
+    current = record;
+    await safeSave(record);
+    if (localToken !== token) {
+      return;
+    }
+    setPhase("idle");
+    showRecovery(record);
+    deps.ui.toast(
+      t(
+        stage === "insert"
+          ? "pipeline.sessionChangedToast"
+          : "pipeline.sessionChangedAfterInsertToast",
+      ),
+      { error: true, durationMs: 10_000 },
+    );
+  };
+
   const start = async (nextTarget: InsertTarget): Promise<void> => {
     if (phase !== "idle") {
       return;
     }
     target = nextTarget;
+    originPath = deps.getSessionPath();
+    deps.rememberDraft(nextTarget);
     const localToken = ++token;
     const localRecorder = deps.createRecorder();
     recorder = localRecorder;
@@ -243,6 +281,7 @@ export function createPipeline(deps: PipelineDeps): Pipeline {
       updatedAt: now(),
       target,
       stage: "stt",
+      originPath: originPath ?? undefined,
       error: "",
       attempts: 0,
       provider: config.stt.provider,
@@ -338,13 +377,14 @@ export function createPipeline(deps: PipelineDeps): Pipeline {
         return;
       }
       const message = error instanceof Error ? error.message : t("pipeline.cleanupFailedGeneric");
+      const changed = sessionChanged(record);
       record.stage = "llm";
-      record.error = message;
+      record.error = changed ? t("pipeline.sessionChanged") : message;
       record.attempts += 1;
 
       const fallbackConfig = deps.getConfig();
       let insertedRaw = false;
-      if (fallbackConfig.behavior.fallbackToRaw && record.rawText) {
+      if (fallbackConfig.behavior.fallbackToRaw && record.rawText && !changed) {
         insertedRaw = deps.insertText(record.rawText, record.target);
         if (insertedRaw) {
           record.rawInserted = true;
@@ -361,7 +401,11 @@ export function createPipeline(deps: PipelineDeps): Pipeline {
       setPhase("idle");
       showRecovery(record);
       deps.ui.toast(
-        insertedRaw ? t("pipeline.cleanupFailedRaw") : t("pipeline.cleanupFailed", { message }),
+        changed
+          ? t("pipeline.sessionChangedToast")
+          : insertedRaw
+            ? t("pipeline.cleanupFailedRaw")
+            : t("pipeline.cleanupFailed", { message }),
         {
           error: true,
           durationMs: 10_000,
@@ -386,6 +430,12 @@ export function createPipeline(deps: PipelineDeps): Pipeline {
       return;
     }
 
+    if (sessionChanged(record)) {
+      await failSessionChanged(record, localToken, "insert");
+      return;
+    }
+
+    const draftChanged = deps.isDraftChanged(record.target);
     const inserted = record.rawInserted
       ? deps.replaceText(text, record.target)
       : deps.insertText(text, record.target);
@@ -403,7 +453,7 @@ export function createPipeline(deps: PipelineDeps): Pipeline {
       return;
     }
 
-    record.rawInserted = false;
+    record.rawInserted = true;
     if (record.target === "question" && !deps.isQuestionOpen()) {
       record.target = "composer";
     }
@@ -423,10 +473,18 @@ export function createPipeline(deps: PipelineDeps): Pipeline {
       await finishSuccess(record, t("pipeline.inserted"));
       return;
     }
+    if (draftChanged) {
+      await finishSuccess(record, t("pipeline.draftChanged"), 6000);
+      return;
+    }
     await runSubmit(record, localToken);
   };
 
   const runSubmit = async (record: FailedDictation, localToken: number): Promise<void> => {
+    if (sessionChanged(record)) {
+      await failSessionChanged(record, localToken, "submit");
+      return;
+    }
     setPhase("submit");
     const submitted = deps.submitPrompt(record.target);
     if (localToken !== token) {
@@ -470,18 +528,25 @@ export function createPipeline(deps: PipelineDeps): Pipeline {
     });
   };
 
-  const finishSuccess = async (record: FailedDictation, message: string): Promise<void> => {
+  const finishSuccess = async (
+    record: FailedDictation,
+    message: string,
+    durationMs = 2000,
+  ): Promise<void> => {
     await safeRemove(record.id);
     current = null;
     deps.ui.hideRecovery();
     setPhase("idle");
-    deps.ui.toast(message, { durationMs: 2000 });
+    deps.ui.toast(message, { durationMs });
   };
 
   const showRecovery = (record: FailedDictation): void => {
     deps.ui.showRecovery(record, {
       onRetry: () => void retryLast(),
-      onInsertRaw: record.rawText && !record.rawInserted ? () => void insertRaw(record) : undefined,
+      onInsertRaw:
+        (record.cleanText || record.rawText) && !record.rawInserted
+          ? () => void insertRaw(record)
+          : undefined,
       onSubmitRaw: record.rawInserted ? () => void submitRaw(record) : undefined,
       onDelete: () => void deleteCurrent(),
       onSettings: () => deps.ui.openSettings(),
@@ -493,14 +558,15 @@ export function createPipeline(deps: PipelineDeps): Pipeline {
       deps.ui.toast(t("pipeline.waitCurrent"), { durationMs: 2500 });
       return;
     }
-    if (!record.rawText) {
+    const text = record.cleanText || record.rawText;
+    if (!text) {
       deps.ui.toast(t("pipeline.rawNotSaved"), { error: true });
       return;
     }
     const localToken = ++token;
     const inserted = record.rawInserted
-      ? deps.replaceText(record.rawText, record.target)
-      : deps.insertText(record.rawText, record.target);
+      ? deps.replaceText(text, record.target)
+      : deps.insertText(text, record.target);
     if (localToken !== token) {
       return;
     }
@@ -508,9 +574,9 @@ export function createPipeline(deps: PipelineDeps): Pipeline {
       deps.ui.toast(t("pipeline.insertFailed"), { error: true });
       return;
     }
+    const usedClean = Boolean(record.cleanText);
     record.rawInserted = true;
-    record.cleanText = undefined;
-    record.stage = "llm";
+    record.stage = usedClean ? "submit" : "llm";
     record.error = "";
     current = record;
     await safeSave(record);
@@ -518,9 +584,9 @@ export function createPipeline(deps: PipelineDeps): Pipeline {
       return;
     }
     showRecovery(record);
-    deps.ui.toast(t("pipeline.rawInserted"), {
+    deps.ui.toast(usedClean ? t("pipeline.textInserted") : t("pipeline.rawInserted"), {
       durationMs: 4000,
-      actionLabel: t("pipeline.submitRaw"),
+      actionLabel: usedClean ? t("pipeline.sendNow") : t("pipeline.submitRaw"),
       action: () => void submitRaw(record),
     });
   };
@@ -531,7 +597,7 @@ export function createPipeline(deps: PipelineDeps): Pipeline {
       return;
     }
     const localToken = ++token;
-    record.cleanText = record.rawText;
+    record.cleanText = record.cleanText || record.rawText;
     record.stage = "submit";
     record.error = "";
     current = record;

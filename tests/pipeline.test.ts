@@ -151,6 +151,9 @@ interface Harness {
   replaceText: ReturnType<typeof vi.fn>;
   submitPrompt: ReturnType<typeof vi.fn>;
   isQuestionOpen: ReturnType<typeof vi.fn>;
+  getSessionPath: ReturnType<typeof vi.fn>;
+  rememberDraft: ReturnType<typeof vi.fn>;
+  isDraftChanged: ReturnType<typeof vi.fn>;
 }
 
 function setup(overrides: Partial<PipelineDeps> = {}): Harness {
@@ -176,6 +179,9 @@ function setup(overrides: Partial<PipelineDeps> = {}): Harness {
   const replaceText = vi.fn(() => true);
   const submitPrompt = vi.fn(() => true);
   const isQuestionOpen = vi.fn(() => true);
+  const getSessionPath = vi.fn(() => "/server/local/session/a");
+  const rememberDraft = vi.fn();
+  const isDraftChanged = vi.fn(() => false);
   let counter = 0;
 
   const deps: PipelineDeps = {
@@ -187,6 +193,9 @@ function setup(overrides: Partial<PipelineDeps> = {}): Harness {
     replaceText,
     submitPrompt,
     isQuestionOpen,
+    getSessionPath,
+    rememberDraft,
+    isDraftChanged,
     store,
     ui: ui.ui,
     now: () => 1000,
@@ -206,6 +215,9 @@ function setup(overrides: Partial<PipelineDeps> = {}): Harness {
     replaceText,
     submitPrompt,
     isQuestionOpen,
+    getSessionPath,
+    rememberDraft,
+    isDraftChanged,
   };
 }
 
@@ -321,6 +333,137 @@ describe("pipeline happy path", () => {
     await h.pipeline.start("composer");
     await h.pipeline.stop();
     expect(h.store.persistenceRequests).toBe(1);
+  });
+});
+
+describe("session guard", () => {
+  it("remembers the session path and draft when recording starts", async () => {
+    const h = setup();
+    await h.pipeline.start("question");
+    expect(h.getSessionPath).toHaveBeenCalled();
+    expect(h.rememberDraft).toHaveBeenCalledWith("question");
+    await h.pipeline.stop();
+  });
+
+  it("keeps the text when the session changed before insertion", async () => {
+    const h = setup();
+    await h.pipeline.start("composer");
+    h.getSessionPath.mockReturnValue("/server/local/session/b");
+    await h.pipeline.stop();
+
+    expect(h.insertText).not.toHaveBeenCalled();
+    expect(h.submitPrompt).not.toHaveBeenCalled();
+    const record = await h.store.latest();
+    expect(record).toMatchObject({
+      stage: "insert",
+      originPath: "/server/local/session/a",
+      cleanText: "чистый текст",
+    });
+    expect(h.ui.recoveries[0]?.record.stage).toBe("insert");
+    expect(h.ui.toasts.some((toast) => /Сессия изменилась/.test(toast.message))).toBe(true);
+    expect(h.pipeline.getState()).toBe("idle");
+  });
+
+  it("inserts and submits after the user returns to the original session", async () => {
+    const h = setup();
+    await h.pipeline.start("composer");
+    h.getSessionPath.mockReturnValue("/server/local/session/b");
+    await h.pipeline.stop();
+    expect(h.insertText).not.toHaveBeenCalled();
+
+    h.getSessionPath.mockReturnValue("/server/local/session/a");
+    await h.pipeline.retryLast();
+
+    expect(h.insertText).toHaveBeenCalledWith("чистый текст", "composer");
+    expect(h.submitPrompt).toHaveBeenCalledWith("composer");
+    expect(h.store.records.size).toBe(0);
+  });
+
+  it("inserts the cleaned text from the recovery banner without inserting it twice", async () => {
+    const h = setup();
+    await h.pipeline.start("composer");
+    h.getSessionPath.mockReturnValue("/server/local/session/b");
+    await h.pipeline.stop();
+    h.getSessionPath.mockReturnValue("/server/local/session/a");
+
+    h.ui.recoveries[0]?.actions.onInsertRaw?.();
+    await vi.waitFor(() => {
+      expect(h.insertText).toHaveBeenCalledWith("чистый текст", "composer");
+    });
+
+    const record = h.pipeline.getCurrentFailure();
+    expect(record?.stage).toBe("submit");
+    expect(record?.cleanText).toBe("чистый текст");
+    expect(record?.rawInserted).toBe(true);
+    await vi.waitFor(() => {
+      expect(h.ui.recoveries.at(-1)?.actions.onSubmitRaw).toBeTypeOf("function");
+    });
+    expect(h.ui.recoveries.at(-1)?.actions.onInsertRaw).toBeUndefined();
+  });
+
+  it("does not submit when the session changes after insertion", async () => {
+    const h = setup();
+    h.insertText.mockImplementation(() => {
+      h.getSessionPath.mockReturnValue("/server/local/session/b");
+      return true;
+    });
+    await h.pipeline.start("composer");
+    await h.pipeline.stop();
+
+    expect(h.insertText).toHaveBeenCalledTimes(1);
+    expect(h.submitPrompt).not.toHaveBeenCalled();
+    const record = await h.store.latest();
+    expect(record?.stage).toBe("submit");
+    expect(h.ui.toasts.some((toast) => /сессия изменилась/i.test(toast.message))).toBe(true);
+  });
+
+  it("does not insert raw fallback text into another session", async () => {
+    const h = setup();
+    h.cleanup.mockRejectedValue(new Error("LLM упал"));
+    await h.pipeline.start("composer");
+    h.getSessionPath.mockReturnValue("/server/local/session/b");
+    await h.pipeline.stop();
+
+    expect(h.insertText).not.toHaveBeenCalled();
+    const record = await h.store.latest();
+    expect(record?.stage).toBe("llm");
+    expect(record?.rawInserted).toBeUndefined();
+    expect(h.ui.toasts.some((toast) => /Сессия изменилась/.test(toast.message))).toBe(true);
+    expect(h.ui.recoveries[0]?.actions.onInsertRaw).toBeTypeOf("function");
+  });
+});
+
+describe("draft guard", () => {
+  it("inserts but does not submit when the draft changed", async () => {
+    const h = setup();
+    h.isDraftChanged.mockReturnValue(true);
+    await h.pipeline.start("composer");
+    await h.pipeline.stop();
+
+    expect(h.isDraftChanged).toHaveBeenCalledWith("composer");
+    expect(h.insertText).toHaveBeenCalledWith("чистый текст", "composer");
+    expect(h.submitPrompt).not.toHaveBeenCalled();
+    expect(h.ui.toasts.at(-1)?.message).toMatch(/изменили текст/);
+    expect(h.store.records.size).toBe(0);
+  });
+
+  it("submits when the draft did not change", async () => {
+    const h = setup();
+    await h.pipeline.start("composer");
+    await h.pipeline.stop();
+    expect(h.submitPrompt).toHaveBeenCalledWith("composer");
+    expect(h.ui.toasts.at(-1)?.message).toBe("Отправлено.");
+  });
+
+  it("keeps the previous behavior when auto-submit is off", async () => {
+    const h = setup();
+    h.config.behavior.autoSubmit = false;
+    h.isDraftChanged.mockReturnValue(true);
+    await h.pipeline.start("composer");
+    await h.pipeline.stop();
+    expect(h.insertText).toHaveBeenCalled();
+    expect(h.submitPrompt).not.toHaveBeenCalled();
+    expect(h.ui.toasts.at(-1)?.message).toBe("Текст вставлен.");
   });
 });
 

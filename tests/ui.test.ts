@@ -10,14 +10,16 @@ function makeUi(overrides: Partial<Parameters<typeof createUi>[0]> = {}): {
   ui: Ui;
   onToggle: ReturnType<typeof vi.fn>;
   onCancel: ReturnType<typeof vi.fn>;
+  onStop: ReturnType<typeof vi.fn>;
   onOpenSettings: ReturnType<typeof vi.fn>;
 } {
   const onToggle = vi.fn();
   const onCancel = vi.fn();
+  const onStop = vi.fn();
   const onOpenSettings = vi.fn();
-  const ui = createUi({ onToggle, onCancel, onOpenSettings, ...overrides });
+  const ui = createUi({ onToggle, onCancel, onStop, onOpenSettings, ...overrides });
   created.push(ui);
-  return { ui, onToggle, onCancel, onOpenSettings };
+  return { ui, onToggle, onCancel, onStop, onOpenSettings };
 }
 
 function addComposer(options: { withActions?: boolean } = {}): {
@@ -443,16 +445,29 @@ describe("question injection", () => {
 });
 
 describe("dictation status", () => {
-  it("shows recording time and cancel", () => {
-    const { ui, onCancel } = makeUi();
+  it("shows recording time and stop/cancel", () => {
+    const { ui, onCancel, onStop } = makeUi();
     addComposer();
     ui.start();
     ui.setState("recording", 65);
     expect(queryOverlay<HTMLElement>(".ocvd-status")?.hidden).toBe(false);
-    expect(queryOverlay<HTMLElement>(".ocvd-status-text")?.textContent).toBe("Запись 01:05");
+    expect(queryOverlay<HTMLElement>(".ocvd-status-text")?.textContent).toBe("01:05");
     expect(queryOverlay<HTMLElement>(".ocvd-dot")).not.toBeNull();
+    const stop = queryOverlay<HTMLButtonElement>(".ocvd-stop");
+    expect(stop?.hidden).toBe(false);
+    expect(stop?.getAttribute("aria-label")).toBe("Остановить запись");
+    stop?.click();
+    expect(onStop).toHaveBeenCalledTimes(1);
     queryOverlay<HTMLButtonElement>(".ocvd-cancel")?.click();
     expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it("hides the stop button outside recording", () => {
+    const { ui } = makeUi();
+    addComposer();
+    ui.start();
+    ui.setState("stt");
+    expect(queryOverlay<HTMLButtonElement>(".ocvd-stop")?.hidden).toBe(true);
   });
 
   it.each([
@@ -482,7 +497,8 @@ describe("dictation status", () => {
     expect(mic?.disabled).toBe(false);
     expect(mic?.classList.contains("ocvd-btn--recording")).toBe(true);
     expect(mic?.getAttribute("aria-label")).toBe("Остановить запись");
-    expect(mic?.querySelector("rect")).not.toBeNull();
+    expect(mic?.querySelector("rect")).toBeNull();
+    expect(mic?.querySelectorAll("path")).toHaveLength(3);
   });
 
   it("hides the status when idle", () => {
@@ -577,7 +593,7 @@ describe("recovery banner", () => {
     expect(callbacks.onRetry).toHaveBeenCalledTimes(1);
     buttonByText("Отправить как есть")?.click();
     expect(callbacks.onSubmitRaw).toHaveBeenCalledTimes(1);
-    buttonByText("Вставить сырой текст")?.click();
+    buttonByText("Вставить текст")?.click();
     expect(callbacks.onInsertRaw).toHaveBeenCalledTimes(1);
     buttonByText("Настройки")?.click();
     expect(callbacks.onSettings).toHaveBeenCalledTimes(1);
