@@ -1,16 +1,16 @@
 import { GM_info } from "$";
 import {
-  STT_PRESETS,
   applyLlmPreset,
   applySttPreset,
   defaultCleanupPrompt,
+  STT_PRESETS,
   validateConfig,
 } from "./config.js";
 import { isAbortError } from "./http.js";
-import { type MessageKey, getLocale, resolveLocale, setLocale, t } from "./i18n.js";
+import { getLocale, type MessageKey, resolveLocale, setLocale, t } from "./i18n.js";
 import { getSelectorStatus } from "./insert.js";
 import { cleanupText } from "./llm.js";
-import { ModelsUnsupportedError, listLlmModels, listSttModels } from "./models.js";
+import { listLlmModels, listSttModels, ModelsUnsupportedError } from "./models.js";
 import { clearFailures, estimateStorage, listFailures } from "./storage.js";
 import type {
   AppConfig,

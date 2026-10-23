@@ -1,5 +1,5 @@
 import { resolveSttEndpoint } from "./config.js";
-import { HttpError, type RetryPolicy, httpRequest } from "./http.js";
+import { HttpError, httpRequest, type RetryPolicy } from "./http.js";
 import { t } from "./i18n.js";
 import { joinOpenAiEndpoint } from "./llm.js";
 import { isSttRegionBlock, retryPolicy } from "./transcribe.js";

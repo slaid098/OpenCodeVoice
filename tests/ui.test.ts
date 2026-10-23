@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { setLocale } from "../src/i18n.js";
 import type { RecoveryActions } from "../src/pipeline.js";
 import type { FailedDictation } from "../src/types.js";
-import { type Ui, createUi } from "../src/ui.js";
+import { createUi, type Ui } from "../src/ui.js";
 
 const created: Ui[] = [];
 

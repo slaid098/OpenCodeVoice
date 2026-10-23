@@ -1,7 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  LEGACY_SELECTORS,
-  SELECTORS,
   findComposerActions,
   findComposerDock,
   findComposerEditor,
@@ -13,9 +11,11 @@ import {
   isDraftChanged,
   isOpencodePage,
   isQuestionPromptOpen,
+  LEGACY_SELECTORS,
   rememberDraft,
   replaceText,
   resolveTarget,
+  SELECTORS,
   submitComposer,
   submitPrompt,
   submitQuestion,

@@ -137,7 +137,7 @@ When the actions row exists but is invisible, off-screen, or covered (`isVisible
 
 ## Stack
 
-Vite 6 + vite-plugin-monkey 5 + TypeScript 5.7 (strict) + Biome 1.9.4 (2-space, 100 width, double quotes, semicolons, trailing commas, `noExplicitAny: error`) + Vitest 3 + Knip 6.24. Node 22 (`.nvmrc`), `engines: node >=20`.
+Vite 8 + vite-plugin-monkey 8 + TypeScript 5.9 (strict) + Biome 2.6 (2-space, 100 width, double quotes, semicolons, trailing commas, `noExplicitAny: error`) + Vitest 5 + Knip 6.42. Node 22 (`.nvmrc`), `engines: ^20.19 || >=22.12` (Vite 8 requirement).
 
 ## Commands
 

@@ -3,13 +3,13 @@ import { createDefaultConfig } from "../src/config.js";
 import { AbortError, HttpError } from "../src/http.js";
 import { setLocale } from "../src/i18n.js";
 import {
-  SttError,
   audioFileName,
   buildFormData,
   formatSttError,
   isSttRegionBlock,
   parseTranscription,
   resolveResponseFormat,
+  SttError,
   transcribe,
 } from "../src/transcribe.js";
 import type { AppConfig } from "../src/types.js";

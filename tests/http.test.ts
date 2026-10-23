@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   AbortError,
-  HttpError,
   computeDelay,
   extractErrorMessage,
+  HttpError,
   httpRequest,
   isAbortError,
   isRetryableStatus,

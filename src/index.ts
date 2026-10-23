@@ -14,8 +14,8 @@ import {
 } from "./insert.js";
 import { setupKeyboardShortcut } from "./keyboard.js";
 import { cleanupText } from "./llm.js";
-import { type Pipeline, type PipelineUi, createPipeline } from "./pipeline.js";
-import { type SettingsPanel, createSettingsPanel } from "./settings-panel.js";
+import { createPipeline, type Pipeline, type PipelineUi } from "./pipeline.js";
+import { createSettingsPanel, type SettingsPanel } from "./settings-panel.js";
 import {
   audioFromFailure,
   audioToArrayBuffer,
@@ -27,7 +27,7 @@ import {
 } from "./storage.js";
 import { transcribe } from "./transcribe.js";
 import type { AppConfig, InsertTarget } from "./types.js";
-import { type Ui, createUi } from "./ui.js";
+import { createUi, type Ui } from "./ui.js";
 
 let config: AppConfig | null = null;
 let startupConfig: AppConfig | null = null;

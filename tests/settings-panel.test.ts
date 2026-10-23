@@ -1,15 +1,15 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { DEFAULT_CLEANUP_PROMPT_RU, createDefaultConfig } from "../src/config.js";
-import { type SettingsPanel, createSettingsPanel } from "../src/settings-panel.js";
+import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from "vitest";
+import { createDefaultConfig, DEFAULT_CLEANUP_PROMPT_RU } from "../src/config.js";
+import { createSettingsPanel, type SettingsPanel } from "../src/settings-panel.js";
 import { clearFailures, saveFailure } from "../src/storage.js";
 import type { AppConfig, FailedDictation } from "../src/types.js";
 import { __getRequests, __setXmlhttpResponder } from "./__mocks__/$/index.js";
 
 interface PanelDeps {
   getConfig: () => AppConfig;
-  saveConfig: ReturnType<typeof vi.fn>;
-  onSaved: ReturnType<typeof vi.fn>;
-  onClearFailures?: ReturnType<typeof vi.fn>;
+  saveConfig: Mock<(config: AppConfig) => void>;
+  onSaved: Mock<(config: AppConfig) => void>;
+  onClearFailures?: Mock<() => Promise<void>>;
   getLastRawText: () => string | null;
 }
 
@@ -28,13 +28,13 @@ function validConfig(overrides: (config: AppConfig) => void = () => {}): AppConf
 
 function makeDeps(config = validConfig()): PanelDeps {
   let current = config;
-  const saveConfig = vi.fn((next: AppConfig) => {
+  const saveConfig = vi.fn<(next: AppConfig) => void>((next) => {
     current = next;
   });
   return {
     getConfig: () => current,
     saveConfig,
-    onSaved: vi.fn(),
+    onSaved: vi.fn<(config: AppConfig) => void>(),
     getLastRawText: () => null,
   };
 }

@@ -2,14 +2,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AudioRecorder } from "../src/audio.js";
 import { createDefaultConfig } from "../src/config.js";
 import { AbortError } from "../src/http.js";
+import type { ToastOptions } from "../src/pipeline.js";
 import {
+  createPipeline,
   type FailureStore,
   type PipelineDeps,
   type PipelineUi,
   type RecoveryActions,
-  createPipeline,
 } from "../src/pipeline.js";
-import type { ToastOptions } from "../src/pipeline.js";
 import type {
   AppConfig,
   CleanupResult,

@@ -1,30 +1,30 @@
 import { describe, expect, it } from "vitest";
 import {
-  CONFIG_KEY,
-  DEFAULT_CLEANUP_PROMPT_EN,
-  DEFAULT_CLEANUP_PROMPT_RU,
-  LEGACY_OPENAI_STT,
-  LLM_PRESETS,
-  STT_PRESETS,
   applyLlmPreset,
   applySttPreset,
+  CONFIG_KEY,
   createDefaultConfig,
+  DEFAULT_CLEANUP_PROMPT_EN,
+  DEFAULT_CLEANUP_PROMPT_RU,
   defaultCleanupPrompt,
   getCleanupPrompt,
   isFirstRun,
+  LEGACY_OPENAI_STT,
+  LLM_PRESETS,
   loadConfig,
   registerMenuCommands,
   resolveSttEndpoint,
   resolveSttModel,
+  STT_PRESETS,
   saveConfig,
   validateConfig,
 } from "../src/config.js";
 import type { AppConfig, LlmProviderId, SttProviderId } from "../src/types.js";
 import {
-  GM_getValue,
-  GM_setValue,
   __getMenuCommands,
   __getMockStore,
+  GM_getValue,
+  GM_setValue,
 } from "./__mocks__/$/index.js";
 
 function storedConfig(): AppConfig {

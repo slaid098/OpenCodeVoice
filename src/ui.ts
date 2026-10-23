@@ -1,7 +1,6 @@
 import { formatTime } from "./audio.js";
-import { type MessageKey, getLocale, t } from "./i18n.js";
+import { getLocale, type MessageKey, t } from "./i18n.js";
 import {
-  SELECTORS,
   findComposerActions,
   findComposerDock,
   findComposerEditor,
@@ -10,6 +9,7 @@ import {
   findQuestionFooter,
   findQuestionHeaderActions,
   findQuestionInput,
+  SELECTORS,
 } from "./insert.js";
 import type { RecoveryActions, ToastOptions } from "./pipeline.js";
 import type { DictationPhase, FailedDictation, InsertTarget } from "./types.js";

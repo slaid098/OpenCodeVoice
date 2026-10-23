@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  MESSAGE_KEYS,
   getLocale,
   initI18n,
+  MESSAGE_KEYS,
   resetI18n,
   resolveLocale,
   setLocale,

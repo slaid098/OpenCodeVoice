@@ -1,5 +1,5 @@
 import { DEFAULT_CLEANUP_PROMPT_RU, getCleanupPrompt } from "./config.js";
-import { AbortError, HttpError, type RetryHooks, type RetryPolicy, httpRequest } from "./http.js";
+import { AbortError, HttpError, httpRequest, type RetryHooks, type RetryPolicy } from "./http.js";
 import { t } from "./i18n.js";
 import { retryPolicy } from "./transcribe.js";
 import type { AppConfig, CleanupResult } from "./types.js";
