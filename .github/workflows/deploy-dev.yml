@@ -1,0 +1,55 @@
+name: Deploy dev
+
+on:
+  push:
+    branches: [dev]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Knip
+        run: npm run knip
+
+      - name: Test
+        run: npx vitest run --coverage
+
+      - name: Build dev userscript
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          OCVD_CHANNEL=dev OCVD_VERSION="${VERSION}-dev.${GITHUB_RUN_NUMBER}" npm run build
+
+      - name: Deploy to dev-dist branch
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd dist
+          git init -b dev-dist
+          git config user.name "github-actions"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git commit -m "deploy-dev: ${GITHUB_SHA::7}"
+
+          git remote add github "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push --force github dev-dist
