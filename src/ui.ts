@@ -79,6 +79,7 @@ export function createUi(options: UiOptions): Ui {
   let heartbeat: ReturnType<typeof setInterval> | null = null;
   let toastTimer: ReturnType<typeof setTimeout> | null = null;
   let blockedActions: { node: HTMLElement; key: string; until: number } | null = null;
+  let currentPath = "";
 
   let host: HTMLElement | null = null;
   let shadow: ShadowRoot | null = null;
@@ -148,13 +149,14 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
   animation: ocvd-spin-page 0.8s linear infinite;
 }
 .ocvd-fallback-actions {
-  position: absolute;
-  right: 56px;
-  bottom: 8px;
   z-index: 2147482999;
-  display: inline-flex;
+  display: flex;
+  flex: 1 0 100%;
   gap: 2px;
   align-items: center;
+  justify-content: flex-end;
+  width: 100%;
+  padding: 4px 6px 0;
   pointer-events: auto;
 }
 .ocvd-floating-actions {
@@ -840,9 +842,11 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
     );
 
   const removeComposerUi = (): void => {
-    document.querySelector('[data-ocvd="composer-fallback"]')?.remove();
-    document.querySelector('button[data-ocvd="composer-mic"]')?.remove();
-    document.querySelector('button[data-ocvd="composer-settings"]')?.remove();
+    for (const node of document.querySelectorAll(
+      '[data-ocvd="composer-fallback"], button[data-ocvd="composer-mic"], button[data-ocvd="composer-settings"]',
+    )) {
+      node.remove();
+    }
     blockedActions = null;
   };
 
@@ -910,6 +914,29 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
     return hit === node || node.contains(hit);
   };
 
+  /** The direct child of `container` that contains `node`, if any. */
+  const directChild = (container: HTMLElement, node: Element | null): HTMLElement | null => {
+    let current: Element | null = node;
+    while (current && current.parentElement !== container) {
+      current = current.parentElement;
+    }
+    return current instanceof HTMLElement && current.parentElement === container ? current : null;
+  };
+
+  /** True when every button stays inside the actions row, not merely on screen. */
+  const fitsInside = (container: HTMLElement, nodes: HTMLElement[]): boolean => {
+    const bounds = container.getBoundingClientRect();
+    return nodes.every((node) => {
+      const rect = node.getBoundingClientRect();
+      return (
+        rect.left >= bounds.left - 1 &&
+        rect.top >= bounds.top - 1 &&
+        rect.right <= bounds.right + 1 &&
+        rect.bottom <= bounds.bottom + 1
+      );
+    });
+  };
+
   const composerKey = (actions: HTMLElement, form: HTMLElement | null): string => {
     const keyOf = (node: Element | null): string => {
       if (!(node instanceof HTMLElement) || node.getClientRects().length === 0) {
@@ -922,13 +949,17 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
   };
 
   const showComposerFallback = (dock: HTMLElement | null, form: HTMLElement | null): void => {
-    // Firefox Android may render the composer without a dock. Prefer the dock,
-    // then the visible form, so a temporary fallback stays attached to the
-    // composer instead of floating over the conversation.
+    // The form is the rounded composer card itself, so a static row appended
+    // there grows the card and stays next to the action row. The dock can span
+    // the whole session panel; preferring it left the fallback detached at the
+    // bottom of the screen or outside the viewport. The dock remains a fallback
+    // for builds that render no form (Firefox Android).
     const anchor =
-      [dock, form].find(
-        (node): node is HTMLElement => node !== null && isRenderedNode(node) && isHittable(node),
+      [form, dock].find(
+        (node): node is HTMLElement =>
+          node !== null && isRenderedNode(node) && overlapsViewport(node),
       ) ?? null;
+
     let container = document.querySelector<HTMLElement>('[data-ocvd="composer-fallback"]');
     if (!container) {
       container = document.createElement("div");
@@ -941,9 +972,6 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
     if (anchor) {
       if (container.parentElement !== anchor) {
         anchor.appendChild(container);
-      }
-      if (window.getComputedStyle(anchor).position === "static") {
-        anchor.style.position = "relative";
       }
     } else if (container.parentElement !== document.documentElement) {
       document.documentElement.appendChild(container);
@@ -1004,8 +1032,14 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
       const mic = takeButton('button[data-ocvd="composer-mic"]', () => makeMicButton("composer"));
       const gear = takeButton('button[data-ocvd="composer-settings"]', makeGearButton);
 
+      // OpenCode nests the submit button inside a flex wrapper, so the
+      // reference node for insertBefore must be its direct child in the row.
       const submit = actions.querySelector<HTMLElement>(SELECTORS.submit);
-      const anchor = submit && submit !== mic && submit !== gear ? submit : null;
+      const submitRow = directChild(actions, submit);
+      const anchor =
+        submitRow && submitRow !== mic && submitRow !== gear && !submitRow.contains(mic)
+          ? submitRow
+          : null;
       if (mic.parentElement !== actions || mic.nextElementSibling !== anchor) {
         actions.insertBefore(mic, anchor);
       }
@@ -1014,7 +1048,13 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
       }
       fallback?.remove();
 
-      if (isVisibleNode(actions) && isOnScreen(actions) && isHittable(mic) && isHittable(gear)) {
+      if (
+        isVisibleNode(actions) &&
+        isOnScreen(actions) &&
+        fitsInside(actions, [mic, gear]) &&
+        isHittable(mic) &&
+        isHittable(gear)
+      ) {
         blockedActions = null;
         return;
       }
@@ -1141,6 +1181,11 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
     if (!document.documentElement) {
       return;
     }
+    const path = window.location.pathname + window.location.search;
+    if (currentPath !== "" && path !== currentPath) {
+      removeComposerUi();
+    }
+    currentPath = path;
     ensureStyle();
     ensureHost();
     injectComposer();
@@ -1249,6 +1294,7 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
     window.removeEventListener("pageshow", scheduleInject);
     window.removeEventListener("popstate", scheduleInject);
     document.removeEventListener("visibilitychange", onVisibilityChange);
+    currentPath = "";
     for (const node of document.querySelectorAll(
       '[data-ocvd="composer-mic"], [data-ocvd="question-mic"], [data-ocvd="composer-settings"], [data-ocvd="composer-fallback"], [data-ocvd="question-fallback"]',
     )) {

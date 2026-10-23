@@ -22,14 +22,17 @@ function makeUi(overrides: Partial<Parameters<typeof createUi>[0]> = {}): {
   return { ui, onToggle, onCancel, onStop, onOpenSettings };
 }
 
-function addComposer(options: { withActions?: boolean } = {}): {
+function addComposer(options: { withActions?: boolean; withNestedSubmit?: boolean } = {}): {
   dock: HTMLElement;
+  form: HTMLFormElement;
   editor: HTMLElement;
   actions: HTMLElement | null;
   submit: HTMLButtonElement;
 } {
   const dock = document.createElement("div");
   dock.setAttribute("data-component", "session-composer-dock");
+  const form = document.createElement("form");
+  form.setAttribute("data-component", "composer");
   const editor = document.createElement("div");
   editor.setAttribute("data-component", "composer-editor");
   editor.setAttribute("role", "textbox");
@@ -41,15 +44,22 @@ function addComposer(options: { withActions?: boolean } = {}): {
 
   let actions: HTMLElement | null = null;
   if (options.withActions === false) {
-    dock.append(editor, submit);
+    form.append(editor, submit);
   } else {
     actions = document.createElement("div");
     actions.setAttribute("data-slot", "composer-actions");
-    actions.appendChild(submit);
-    dock.append(editor, actions);
+    if (options.withNestedSubmit) {
+      const wrapper = document.createElement("div");
+      wrapper.appendChild(submit);
+      actions.appendChild(wrapper);
+    } else {
+      actions.appendChild(submit);
+    }
+    form.append(editor, actions);
   }
+  dock.append(form);
   document.body.appendChild(dock);
-  return { dock, editor, actions, submit };
+  return { dock, form, editor, actions, submit };
 }
 
 interface QuestionFixture {
@@ -187,6 +197,19 @@ describe("composer injection", () => {
     expect(mic?.getAttribute("aria-label")).toBe("Начать голосовую диктовку");
   });
 
+  it("injects next to a submit button nested in a wrapper", () => {
+    const { ui } = makeUi();
+    const { actions: slot, submit } = addComposer({ withNestedSubmit: true });
+    ui.start();
+
+    const gear = slot?.querySelector<HTMLButtonElement>('[data-ocvd="composer-settings"]');
+    const mic = slot?.querySelector<HTMLButtonElement>('[data-ocvd="composer-mic"]');
+    expect(gear).not.toBeNull();
+    expect(mic).not.toBeNull();
+    expect([...(slot?.children ?? [])]).toEqual([gear, mic, submit.parentElement]);
+    expect(submit.parentElement?.contains(submit)).toBe(true);
+  });
+
   it("does not duplicate buttons on repeated refresh", () => {
     const { ui } = makeUi();
     const { actions: slot } = addComposer();
@@ -314,14 +337,14 @@ describe("composer injection", () => {
 
   it("keeps the mic and gear available when the actions row is hidden", () => {
     const { ui, onToggle } = makeUi();
-    const { dock, actions: slot } = addComposer();
+    const { form, actions: slot } = addComposer();
     Object.defineProperty(slot, "getClientRects", { value: () => [], configurable: true });
     ui.start();
 
     expect(slot?.querySelector('[data-ocvd="composer-mic"]')).toBeNull();
     const fallback = document.querySelector<HTMLElement>('[data-ocvd="composer-fallback"]');
     expect(fallback).not.toBeNull();
-    expect(fallback?.parentElement).toBe(dock);
+    expect(fallback?.parentElement).toBe(form);
     expect(fallback?.querySelector('[data-ocvd="composer-settings"]')).not.toBeNull();
     const mic = fallback?.querySelector<HTMLButtonElement>('[data-ocvd="composer-mic"]');
     expect(mic).not.toBeNull();
@@ -363,11 +386,104 @@ describe("composer injection", () => {
     expect(document.querySelector('button[data-ocvd="question-mic"]')).not.toBeNull();
   });
 
+  it("keeps the fallback on the composer when the row is covered", () => {
+    const hit = vi.spyOn(document, "elementFromPoint").mockReturnValue(document.body);
+    const { ui } = makeUi();
+    const { form, actions: slot } = addComposer();
+    if (slot) {
+      Object.defineProperty(slot, "getBoundingClientRect", {
+        value: () => ({
+          left: 0,
+          top: 0,
+          right: 300,
+          bottom: 50,
+          width: 300,
+          height: 50,
+          x: 0,
+          y: 0,
+          toJSON: () => ({}),
+        }),
+        configurable: true,
+      });
+    }
+    ui.start();
+
+    const fallback = document.querySelector<HTMLElement>('[data-ocvd="composer-fallback"]');
+    expect(fallback).not.toBeNull();
+    expect(fallback?.parentElement).toBe(form);
+    expect(fallback?.classList.contains("ocvd-floating-actions--fixed")).toBe(false);
+    hit.mockRestore();
+  });
+
+  it("anchors the fallback to a form that extends under the viewport", () => {
+    const { ui } = makeUi();
+    const { form, actions: slot } = addComposer();
+    Object.defineProperty(slot, "getClientRects", { value: () => [], configurable: true });
+    Object.defineProperty(form, "getBoundingClientRect", {
+      value: () => ({
+        left: 0,
+        top: 500,
+        right: 300,
+        bottom: window.innerHeight + 40,
+        width: 300,
+        height: window.innerHeight - 460,
+        x: 0,
+        y: 500,
+        toJSON: () => ({}),
+      }),
+      configurable: true,
+    });
+    ui.start();
+
+    const fallback = document.querySelector<HTMLElement>('[data-ocvd="composer-fallback"]');
+    expect(fallback?.parentElement).toBe(form);
+    expect(fallback?.classList.contains("ocvd-fallback-actions")).toBe(true);
+  });
+
+  it("moves buttons out of a row that cannot fit them", () => {
+    const original = HTMLElement.prototype.getBoundingClientRect;
+    const rect = (left: number, top: number, right: number, bottom: number): DOMRect => ({
+      left,
+      top,
+      right,
+      bottom,
+      width: right - left,
+      height: bottom - top,
+      x: left,
+      y: top,
+      toJSON: () => ({}),
+    });
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      if (this.matches('[data-slot="composer-actions"]')) {
+        return rect(0, 0, 100, 50);
+      }
+      if (this.matches('button[data-ocvd="composer-mic"]')) {
+        return rect(200, 0, 248, 48);
+      }
+      if (this.matches('button[data-ocvd="composer-settings"]')) {
+        return rect(150, 0, 198, 48);
+      }
+      return original.call(this);
+    });
+
+    const { ui } = makeUi();
+    const { form } = addComposer();
+    ui.start();
+
+    const fallback = document.querySelector<HTMLElement>('[data-ocvd="composer-fallback"]');
+    expect(fallback).not.toBeNull();
+    expect(fallback?.parentElement).toBe(form);
+    expect(fallback?.classList.contains("ocvd-fallback-actions")).toBe(true);
+    vi.restoreAllMocks();
+  });
+
   it("uses a fixed fallback when the whole composer dock is hidden", () => {
     const { ui } = makeUi();
     addSessionPanel();
-    const { dock, editor, actions: slot } = addComposer();
-    for (const node of [dock, editor, slot]) {
+    const { dock, form, editor, actions: slot } = addComposer();
+    for (const node of [dock, form, editor, slot]) {
       if (node) {
         Object.defineProperty(node, "getClientRects", { value: () => [], configurable: true });
       }
@@ -381,10 +497,49 @@ describe("composer injection", () => {
     expect(fallback?.querySelector('[data-ocvd="composer-mic"]')).not.toBeNull();
   });
 
+  it("puts the mic into the new composer after a session switch", () => {
+    const { ui } = makeUi();
+    const previous = addComposer();
+    ui.start();
+
+    window.history.pushState({}, "", "/server/local/session/next");
+    previous.dock.remove();
+    const next = addComposer();
+    ui.refresh();
+
+    expect(next.actions?.querySelector('[data-ocvd="composer-mic"]')).not.toBeNull();
+    expect(next.actions?.querySelector('[data-ocvd="composer-settings"]')).not.toBeNull();
+    expect(document.querySelectorAll('[data-ocvd="composer-mic"]')).toHaveLength(1);
+    window.history.replaceState({}, "", "/");
+  });
+
+  it("shows a fixed fallback immediately when the new composer is hidden", () => {
+    const { ui } = makeUi();
+    addSessionPanel();
+    const previous = addComposer();
+    ui.start();
+    previous.dock.remove();
+
+    window.history.pushState({}, "", "/server/local/session/next");
+    const next = addComposer();
+    for (const node of [next.dock, next.form, next.editor, next.actions]) {
+      if (node) {
+        Object.defineProperty(node, "getClientRects", { value: () => [], configurable: true });
+      }
+    }
+
+    ui.refresh();
+    const fallback = document.querySelector<HTMLElement>('[data-ocvd="composer-fallback"]');
+    expect(fallback).not.toBeNull();
+    expect(fallback?.classList.contains("ocvd-floating-actions--fixed")).toBe(true);
+    expect(fallback?.querySelector('[data-ocvd="composer-mic"]')).not.toBeNull();
+    window.history.replaceState({}, "", "/");
+  });
+
   it("does not float a composer fallback on the home page with a stale hidden composer", () => {
     const { ui } = makeUi();
-    const { dock, editor, actions: slot } = addComposer();
-    for (const node of [dock, editor, slot]) {
+    const { dock, form, editor, actions: slot } = addComposer();
+    for (const node of [dock, form, editor, slot]) {
       if (node) {
         Object.defineProperty(node, "getClientRects", { value: () => [], configurable: true });
       }
