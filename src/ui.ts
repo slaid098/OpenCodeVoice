@@ -61,9 +61,6 @@ const RETRY_KEY: Record<FailedDictation["stage"], MessageKey> = {
 /** Retry a layout that could not fit our buttons after this pause. */
 const ROW_RETRY_MS = 15_000;
 
-/** Do not float a fixed fallback while a new session is still settling. */
-const SESSION_SETTLE_MS = 1_000;
-
 /** OpenCode modal layers that cover the session and make the composer unusable. */
 const OVERLAY_SELECTORS = [
   '[data-component="dialog-overlay"]',
@@ -79,12 +76,10 @@ export function createUi(options: UiOptions): Ui {
   let started = false;
   let observer: MutationObserver | null = null;
   let scheduled: ReturnType<typeof setTimeout> | null = null;
-  let settleTimer: ReturnType<typeof setTimeout> | null = null;
   let heartbeat: ReturnType<typeof setInterval> | null = null;
   let toastTimer: ReturnType<typeof setTimeout> | null = null;
   let blockedActions: { node: HTMLElement; key: string; until: number } | null = null;
   let currentPath = "";
-  let sessionChangedAt = 0;
 
   let host: HTMLElement | null = null;
   let shadow: ShadowRoot | null = null;
@@ -919,6 +914,15 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
     return hit === node || node.contains(hit);
   };
 
+  /** The direct child of `container` that contains `node`, if any. */
+  const directChild = (container: HTMLElement, node: Element | null): HTMLElement | null => {
+    let current: Element | null = node;
+    while (current && current.parentElement !== container) {
+      current = current.parentElement;
+    }
+    return current instanceof HTMLElement && current.parentElement === container ? current : null;
+  };
+
   /** True when every button stays inside the actions row, not merely on screen. */
   const fitsInside = (container: HTMLElement, nodes: HTMLElement[]): boolean => {
     const bounds = container.getBoundingClientRect();
@@ -944,25 +948,17 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
     return `${window.innerWidth}x${window.innerHeight}|${keyOf(form)}|${keyOf(actions)}`;
   };
 
-  const showComposerFallback = (
-    dock: HTMLElement | null,
-    form: HTMLElement | null,
-    allowFixed: boolean,
-  ): void => {
-    // Firefox Android may render the composer without a dock. Prefer the dock,
-    // then the visible form, so a temporary fallback stays attached to the
-    // composer instead of floating over the conversation. A rendered composer
-    // can be temporarily covered during a session transition; anchoring to it
-    // is still better than a fixed panel over the chat.
+  const showComposerFallback = (dock: HTMLElement | null, form: HTMLElement | null): void => {
+    // The form is the rounded composer card itself, so a static row appended
+    // there grows the card and stays next to the action row. The dock can span
+    // the whole session panel; preferring it left the fallback detached at the
+    // bottom of the screen or outside the viewport. The dock remains a fallback
+    // for builds that render no form (Firefox Android).
     const anchor =
-      [dock, form].find(
-        (node): node is HTMLElement => node !== null && isRenderedNode(node) && isOnScreen(node),
+      [form, dock].find(
+        (node): node is HTMLElement =>
+          node !== null && isRenderedNode(node) && overlapsViewport(node),
       ) ?? null;
-
-    if (!anchor && !allowFixed) {
-      removeComposerUi();
-      return;
-    }
 
     let container = document.querySelector<HTMLElement>('[data-ocvd="composer-fallback"]');
     if (!container) {
@@ -1036,8 +1032,14 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
       const mic = takeButton('button[data-ocvd="composer-mic"]', () => makeMicButton("composer"));
       const gear = takeButton('button[data-ocvd="composer-settings"]', makeGearButton);
 
+      // OpenCode nests the submit button inside a flex wrapper, so the
+      // reference node for insertBefore must be its direct child in the row.
       const submit = actions.querySelector<HTMLElement>(SELECTORS.submit);
-      const anchor = submit && submit !== mic && submit !== gear ? submit : null;
+      const submitRow = directChild(actions, submit);
+      const anchor =
+        submitRow && submitRow !== mic && submitRow !== gear && !submitRow.contains(mic)
+          ? submitRow
+          : null;
       if (mic.parentElement !== actions || mic.nextElementSibling !== anchor) {
         actions.insertBefore(mic, anchor);
       }
@@ -1072,7 +1074,7 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
       return;
     }
 
-    showComposerFallback(dock, form, Date.now() - sessionChangedAt >= SESSION_SETTLE_MS);
+    showComposerFallback(dock, form);
 
     // Remember the layout only when the row itself is on screen but our
     // buttons do not fit there. A row hidden by a transient overlay must be
@@ -1181,15 +1183,7 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
     }
     const path = window.location.pathname + window.location.search;
     if (currentPath !== "" && path !== currentPath) {
-      sessionChangedAt = Date.now();
       removeComposerUi();
-      if (settleTimer) {
-        clearTimeout(settleTimer);
-      }
-      settleTimer = setTimeout(() => {
-        settleTimer = null;
-        scheduleInject();
-      }, SESSION_SETTLE_MS);
     }
     currentPath = path;
     ensureStyle();
@@ -1296,17 +1290,11 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
       clearTimeout(scheduled);
       scheduled = null;
     }
-    if (settleTimer) {
-      clearTimeout(settleTimer);
-      settleTimer = null;
-    }
     hideToast();
     window.removeEventListener("pageshow", scheduleInject);
     window.removeEventListener("popstate", scheduleInject);
     document.removeEventListener("visibilitychange", onVisibilityChange);
     currentPath = "";
-    sessionChangedAt = 0;
-    settleTimer = null;
     for (const node of document.querySelectorAll(
       '[data-ocvd="composer-mic"], [data-ocvd="question-mic"], [data-ocvd="composer-settings"], [data-ocvd="composer-fallback"], [data-ocvd="question-fallback"]',
     )) {
