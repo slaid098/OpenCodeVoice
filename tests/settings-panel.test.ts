@@ -154,6 +154,14 @@ function visibleInlineText(): string {
     .join(" | ");
 }
 
+function modelList(): HTMLElement {
+  return must(root().querySelector<HTMLElement>(".model-list"), "model list");
+}
+
+function modelOptions(): HTMLElement[] {
+  return [...root().querySelectorAll<HTMLElement>(".model-list .model-option")];
+}
+
 function json(payload: unknown, status = 200): { status: number; responseText: string } {
   return { status, responseText: JSON.stringify(payload) };
 }
@@ -451,7 +459,7 @@ describe("STT tab", () => {
     expect(deps.onSaved).not.toHaveBeenCalled();
   });
 
-  it("loads STT models into the datalist and fills an empty model", async () => {
+  it("shows the model list after loading and fills an empty model", async () => {
     __setXmlhttpResponder(() =>
       json({
         data: [
@@ -473,11 +481,84 @@ describe("STT tab", () => {
       expect(visibleInlineText()).toContain("Модели загружены: 3.");
     });
     expect(input("Модель").value).toBe("whisper-large-v3-turbo");
-    const options = [...root().querySelectorAll<HTMLOptionElement>("datalist option")].map(
-      (option) => option.value,
-    );
-    expect(options).toEqual(["whisper-large-v3-turbo", "whisper-large-v3", "custom-model"]);
+    expect(modelList().hidden).toBe(false);
+    expect(modelOptions().map((option) => option.textContent)).toEqual([
+      "whisper-large-v3-turbo",
+      "whisper-large-v3",
+      "custom-model",
+    ]);
     expect(button("Загрузить модели").disabled).toBe(false);
+  });
+
+  it("selects a model from the loaded list", async () => {
+    __setXmlhttpResponder(() => json({ data: [{ id: "model-a" }, { id: "model-b" }] }));
+    const { deps } = openPanel(
+      makeDeps(
+        validConfig((config) => {
+          config.stt.groqModel = "";
+        }),
+      ),
+    );
+    clickButton("Загрузить модели");
+    await vi.waitFor(() => {
+      expect(visibleInlineText()).toContain("Модели загружены: 2.");
+    });
+    const option = modelOptions().find((node) => node.textContent === "model-b");
+    must(option, "model-b option").click();
+    expect(input("Модель").value).toBe("model-b");
+    expect(modelList().hidden).toBe(true);
+    clickButton("Сохранить");
+    const saved = deps.saveConfig.mock.calls[0]?.[0] as AppConfig;
+    expect(saved.stt.groqModel).toBe("model-b");
+  });
+
+  it("filters the model list while typing", async () => {
+    __setXmlhttpResponder(() =>
+      json({
+        data: [{ id: "whisper-large-v3" }, { id: "whisper-large-v3-turbo" }, { id: "other" }],
+      }),
+    );
+    openPanel();
+    clickButton("Загрузить модели");
+    await vi.waitFor(() => {
+      expect(visibleInlineText()).toContain("Модели загружены: 3.");
+    });
+    setValue(input("Модель"), "large-v3");
+    expect(modelOptions().map((option) => option.textContent)).toEqual([
+      "whisper-large-v3-turbo",
+      "whisper-large-v3",
+    ]);
+    setValue(input("Модель"), "nothing");
+    expect(modelOptions()).toEqual([]);
+    expect(root().querySelector(".model-empty")?.textContent).toBe("Нет совпадений");
+  });
+
+  it("selects a model with the keyboard and closes the list on Escape", async () => {
+    __setXmlhttpResponder(() =>
+      json({ data: [{ id: "whisper-large-v3" }, { id: "whisper-large-v3-turbo" }] }),
+    );
+    const { panel } = openPanel(
+      makeDeps(
+        validConfig((config) => {
+          config.stt.groqModel = "";
+        }),
+      ),
+    );
+    clickButton("Загрузить модели");
+    await vi.waitFor(() => {
+      expect(visibleInlineText()).toContain("Модели загружены: 2.");
+    });
+    const model = input("Модель");
+    model.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+    model.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    expect(model.value).toBe("whisper-large-v3");
+    expect(modelList().hidden).toBe(true);
+
+    model.click();
+    expect(modelList().hidden).toBe(false);
+    model.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(modelList().hidden).toBe(true);
+    expect(panel.isOpen()).toBe(true);
   });
 
   it("keeps an existing model when loading models", async () => {
@@ -627,6 +708,11 @@ describe("LLM tab and cleanup prompt", () => {
       expect(visibleInlineText()).toContain("Модели загружены: 2.");
     });
     expect(input("Модель").value).toBe("deepseek-v4.1-flash");
+    expect(modelList().hidden).toBe(false);
+    expect(modelOptions().map((option) => option.textContent)).toEqual([
+      "deepseek-v4.1-flash",
+      "llama3",
+    ]);
 
     setValue(field("Провайдер"), "custom-openai");
     setValue(input("Модель"), "");
@@ -635,6 +721,7 @@ describe("LLM tab and cleanup prompt", () => {
       expect(visibleInlineText()).toContain("Модели загружены: 1.");
     });
     expect(input("Модель").value).toBe("gpt-4o-mini");
+    expect(modelOptions().map((option) => option.textContent)).toEqual(["gpt-4o-mini"]);
   });
 
   it("tests the LLM connection with the sample phrase", async () => {

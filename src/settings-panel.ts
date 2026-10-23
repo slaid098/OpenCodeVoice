@@ -40,6 +40,10 @@ export interface SettingsPanel {
 type TabId = "stt" | "llm" | "behavior" | "diagnostics";
 type StatusKind = "ok" | "warn" | "error" | "info";
 
+interface ModelListControl {
+  setModels(models: ModelInfo[]): void;
+}
+
 const TABS: ReadonlyArray<{ id: TabId; key: MessageKey }> = [
   { id: "stt", key: "settings.tabs.stt" },
   { id: "llm", key: "settings.tabs.llm" },
@@ -82,6 +86,7 @@ export function createSettingsPanel(deps: SettingsPanelDeps): SettingsPanel {
   let testController: AbortController | null = null;
   let statusTimer: ReturnType<typeof setTimeout> | null = null;
   let closeTimer: ReturnType<typeof setTimeout> | null = null;
+  let activeModelListClose: (() => void) | null = null;
 
   const scriptVersion = (): string => {
     try {
@@ -135,6 +140,15 @@ export function createSettingsPanel(deps: SettingsPanelDeps): SettingsPanel {
     if (testController === controller) {
       testController = null;
     }
+  };
+
+  const closeActiveModelList = (): boolean => {
+    const closeList = activeModelListClose;
+    if (!closeList) {
+      return false;
+    }
+    closeList();
+    return true;
   };
 
   const setBusy = (
@@ -246,6 +260,7 @@ export function createSettingsPanel(deps: SettingsPanelDeps): SettingsPanel {
     if (!contentEl || !draft) {
       return;
     }
+    closeActiveModelList();
     contentEl.replaceChildren();
     promptTextarea = null;
     switch (activeTab) {
@@ -277,6 +292,9 @@ export function createSettingsPanel(deps: SettingsPanelDeps): SettingsPanel {
       if (event.key === "Escape" && !event.isComposing) {
         event.preventDefault();
         event.stopPropagation();
+        if (closeActiveModelList()) {
+          return;
+        }
         close();
       }
     };
@@ -287,6 +305,7 @@ export function createSettingsPanel(deps: SettingsPanelDeps): SettingsPanel {
   const close = (): void => {
     testController?.abort();
     testController = null;
+    closeActiveModelList();
     if (statusTimer) {
       clearTimeout(statusTimer);
       statusTimer = null;
@@ -480,6 +499,36 @@ export function createSettingsPanel(deps: SettingsPanelDeps): SettingsPanel {
 .hint { margin-top: 5px; font-size: 12px; color: var(--muted); }
 .password-row, .model-row { display: flex; gap: 8px; align-items: stretch; }
 .password-row .input, .model-row .input { flex: 1 1 auto; min-width: 0; }
+.model-list {
+  margin-top: 6px;
+  padding: 4px;
+  max-height: 260px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.28);
+}
+.model-list[hidden] { display: none; }
+.model-option, .model-empty {
+  padding: 9px 10px;
+  border-radius: 8px;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.model-option {
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+  cursor: pointer;
+}
+.model-option:hover, .model-option--active { background: var(--field); }
+.model-option[aria-selected="true"] { color: var(--accent); font-weight: 600; }
+.model-empty { color: var(--muted); }
+@media (pointer: coarse) {
+  .model-option { min-height: 48px; }
+}
 .inline-btn, .secondary-btn {
   all: unset;
   box-sizing: border-box;
@@ -689,6 +738,223 @@ export function createSettingsPanel(deps: SettingsPanelDeps): SettingsPanel {
       ? t("settings.sample.ru")
       : t("settings.sample.en");
 
+  const addModelInput = (
+    parent: HTMLElement,
+    labelText: string,
+    value: string,
+    onChange: (value: string) => void,
+    loadLabel: string,
+    onLoad: (status: HTMLElement, picker: ModelListControl) => Promise<void>,
+    placeholder = "",
+  ): { input: HTMLInputElement; status: HTMLElement } => {
+    const row = element("div", "model-row");
+    const input = element("input", "input");
+    input.id = `ocvd-input-${++idCounter}`;
+    input.type = "text";
+    input.value = value;
+    input.autocomplete = "off";
+    input.spellcheck = false;
+    input.placeholder = placeholder || t("settings.modelPlaceholder");
+    input.setAttribute("role", "combobox");
+    input.setAttribute("aria-expanded", "false");
+    input.setAttribute("aria-autocomplete", "list");
+
+    const list = element("div", "model-list");
+    list.id = `ocvd-models-${++idCounter}`;
+    list.setAttribute("role", "listbox");
+    list.hidden = true;
+    input.setAttribute("aria-controls", list.id);
+
+    let models: ModelInfo[] = [];
+    let matches: ModelInfo[] = [];
+    let options: HTMLElement[] = [];
+    let activeIndex = -1;
+
+    const setActive = (index: number): void => {
+      activeIndex = index;
+      options.forEach((option, optionIndex) => {
+        option.classList.toggle("model-option--active", optionIndex === index);
+      });
+      const active = options[index];
+      if (!active) {
+        input.removeAttribute("aria-activedescendant");
+        return;
+      }
+      input.setAttribute("aria-activedescendant", active.id);
+      if (typeof active.scrollIntoView === "function") {
+        active.scrollIntoView({ block: "nearest" });
+      }
+    };
+
+    const choose = (id: string): void => {
+      input.value = id;
+      onChange(id);
+      closeList();
+      input.focus();
+    };
+
+    const renderOptions = (filter: string): void => {
+      const query = filter.trim().toLowerCase();
+      matches =
+        query === ""
+          ? [...models]
+          : models.filter(
+              (model) =>
+                model.id.toLowerCase().includes(query) || model.label.toLowerCase().includes(query),
+            );
+      options = [];
+      list.replaceChildren();
+      if (matches.length === 0) {
+        list.appendChild(element("div", "model-empty", t("settings.models.noMatches")));
+        setActive(-1);
+        return;
+      }
+      const current = input.value.trim();
+      let highlighted = 0;
+      matches.forEach((model, index) => {
+        const option = element("div", "model-option", model.label || model.id);
+        option.id = `${list.id}-option-${index}`;
+        option.setAttribute("role", "option");
+        option.setAttribute("aria-selected", String(model.id === current));
+        if (model.id === current) {
+          highlighted = index;
+        }
+        option.addEventListener("click", () => choose(model.id));
+        list.appendChild(option);
+        options.push(option);
+      });
+      setActive(highlighted);
+    };
+
+    const onOutsidePointerDown = (event: PointerEvent): void => {
+      const path = typeof event.composedPath === "function" ? event.composedPath() : [];
+      if (path.includes(input) || path.includes(list)) {
+        return;
+      }
+      closeList();
+    };
+
+    const closeList = (): void => {
+      if (list.hidden) {
+        return;
+      }
+      list.hidden = true;
+      input.setAttribute("aria-expanded", "false");
+      input.removeAttribute("aria-activedescendant");
+      activeIndex = -1;
+      document.removeEventListener("pointerdown", onOutsidePointerDown, true);
+      if (activeModelListClose === closeList) {
+        activeModelListClose = null;
+      }
+    };
+
+    const openList = (filter: string): void => {
+      if (models.length === 0) {
+        return;
+      }
+      if (activeModelListClose && activeModelListClose !== closeList) {
+        activeModelListClose();
+      }
+      renderOptions(filter);
+      if (list.hidden) {
+        list.hidden = false;
+        input.setAttribute("aria-expanded", "true");
+        document.addEventListener("pointerdown", onOutsidePointerDown, true);
+        if (typeof list.scrollIntoView === "function") {
+          list.scrollIntoView({ block: "nearest" });
+        }
+      }
+      activeModelListClose = closeList;
+    };
+
+    input.addEventListener("input", () => {
+      onChange(input.value);
+      if (models.length > 0) {
+        openList(input.value);
+      }
+    });
+
+    input.addEventListener("click", () => {
+      if (models.length > 0) {
+        openList("");
+      }
+    });
+
+    input.addEventListener("keydown", (event) => {
+      if (event.isComposing) {
+        return;
+      }
+      if (list.hidden) {
+        if ((event.key === "ArrowDown" || event.key === "ArrowUp") && models.length > 0) {
+          event.preventDefault();
+          openList("");
+        }
+        return;
+      }
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        if (options.length === 0) {
+          return;
+        }
+        const step = event.key === "ArrowDown" ? 1 : -1;
+        setActive((activeIndex + step + options.length) % options.length);
+        return;
+      }
+      if (event.key === "Enter") {
+        const model = matches[activeIndex];
+        if (model) {
+          event.preventDefault();
+          choose(model.id);
+        }
+        return;
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        closeList();
+        return;
+      }
+      if (event.key === "Tab") {
+        closeList();
+      }
+    });
+
+    const picker: ModelListControl = {
+      setModels: (next) => {
+        models = next;
+        if (input.value.trim() === "" && next[0]) {
+          input.value = next[0].id;
+          onChange(next[0].id);
+        }
+        openList("");
+      },
+    };
+
+    const button = element("button", "inline-btn", loadLabel);
+    button.type = "button";
+    const status = element("div", "inline-status");
+    status.hidden = true;
+
+    button.addEventListener("click", async () => {
+      const idleLabel = button.textContent ?? loadLabel;
+      button.textContent = t("settings.loading");
+      button.disabled = true;
+      status.hidden = true;
+      try {
+        await onLoad(status, picker);
+      } finally {
+        button.textContent = idleLabel;
+        button.disabled = false;
+      }
+    });
+
+    row.append(input, button);
+    const field = addField(parent, labelText, row);
+    field.appendChild(list);
+    parent.appendChild(status);
+    return { input, status };
+  };
+
   const buildSttTab = (): HTMLElement => {
     const panel = element("div", "tab-panel");
     const provider = draft?.stt.provider ?? "groq";
@@ -754,19 +1020,14 @@ export function createSettingsPanel(deps: SettingsPanelDeps): SettingsPanel {
       isCustom ? (draft?.stt.customModel ?? "") : (draft?.stt.groqModel ?? ""),
       setModel,
       t("settings.stt.loadModels"),
-      async (button, status, input, datalist) => {
+      async (status, picker) => {
         if (!draft) {
-          setBusy(button, false);
           return;
         }
         const controller = startTest();
         try {
           const models = await listSttModels(draft, controller.signal);
-          fillDatalist(datalist, models);
-          if (input.value.trim() === "" && models[0]) {
-            input.value = models[0].id;
-            setModel(models[0].id);
-          }
+          picker.setModels(models);
           setInlineStatus(status, t("settings.stt.modelsLoaded", { count: models.length }), "ok");
         } catch (error) {
           if (controller.signal.aborted || isAbortError(error)) {
@@ -779,7 +1040,6 @@ export function createSettingsPanel(deps: SettingsPanelDeps): SettingsPanel {
           }
         } finally {
           finishTest(controller);
-          setBusy(button, false);
         }
       },
       isCustom ? "" : STT_PRESETS.groq.model,
@@ -889,19 +1149,14 @@ export function createSettingsPanel(deps: SettingsPanelDeps): SettingsPanel {
         if (draft) draft.llm.model = value;
       },
       t("settings.llm.loadModels"),
-      async (button, status, input, datalist) => {
+      async (status, picker) => {
         if (!draft) {
-          setBusy(button, false);
           return;
         }
         const controller = startTest();
         try {
           const models = await listLlmModels(draft, controller.signal);
-          fillDatalist(datalist, models);
-          if (input.value.trim() === "" && models[0]) {
-            input.value = models[0].id;
-            draft.llm.model = models[0].id;
-          }
+          picker.setModels(models);
           setInlineStatus(status, t("settings.llm.modelsLoaded", { count: models.length }), "ok");
         } catch (error) {
           if (controller.signal.aborted || isAbortError(error)) {
@@ -914,7 +1169,6 @@ export function createSettingsPanel(deps: SettingsPanelDeps): SettingsPanel {
           }
         } finally {
           finishTest(controller);
-          setBusy(button, false);
         }
       },
     );
@@ -1398,7 +1652,7 @@ function addField(
   labelText: string,
   control: HTMLElement,
   hint?: string,
-): void {
+): HTMLElement {
   const field = element("div", "field");
   const label = element("label", "field-label", labelText);
   const target = control.querySelector<HTMLElement>("input, textarea, select") ?? control;
@@ -1410,6 +1664,7 @@ function addField(
     field.appendChild(element("div", "hint", hint));
   }
   parent.appendChild(field);
+  return field;
 }
 
 function addTextInput(
@@ -1546,69 +1801,6 @@ function addCheckbox(
   label.append(input, textWrap);
   parent.appendChild(label);
   return input;
-}
-
-function addModelInput(
-  parent: HTMLElement,
-  labelText: string,
-  value: string,
-  onChange: (value: string) => void,
-  loadLabel: string,
-  onLoad: (
-    button: HTMLButtonElement,
-    status: HTMLElement,
-    input: HTMLInputElement,
-    datalist: HTMLDataListElement,
-  ) => Promise<void>,
-  placeholder = "",
-): { input: HTMLInputElement; status: HTMLElement } {
-  const listId = `ocvd-models-${++idCounter}`;
-  const row = element("div", "model-row");
-  const input = element("input", "input");
-  input.id = `ocvd-input-${++idCounter}`;
-  input.type = "text";
-  input.value = value;
-  input.autocomplete = "off";
-  input.spellcheck = false;
-  input.setAttribute("list", listId);
-  input.placeholder = placeholder || t("settings.modelPlaceholder");
-  input.addEventListener("input", () => onChange(input.value));
-
-  const datalist = element("datalist");
-  datalist.id = listId;
-
-  const button = element("button", "inline-btn", loadLabel);
-  button.type = "button";
-  const status = element("div", "inline-status");
-  status.hidden = true;
-
-  button.addEventListener("click", async () => {
-    const idleLabel = button.textContent ?? loadLabel;
-    button.textContent = t("settings.loading");
-    button.disabled = true;
-    status.hidden = true;
-    try {
-      await onLoad(button, status, input, datalist);
-    } finally {
-      button.textContent = idleLabel;
-      button.disabled = false;
-    }
-  });
-
-  row.append(input, button, datalist);
-  addField(parent, labelText, row);
-  parent.appendChild(status);
-  return { input, status };
-}
-
-function fillDatalist(datalist: HTMLDataListElement, models: ModelInfo[]): void {
-  datalist.replaceChildren();
-  for (const model of models) {
-    const option = document.createElement("option");
-    option.value = model.id;
-    option.label = model.label;
-    datalist.appendChild(option);
-  }
 }
 
 function diagRow(key: string, value: string, ok?: boolean): HTMLElement {
