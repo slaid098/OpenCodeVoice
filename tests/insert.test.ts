@@ -1,7 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  LEGACY_SELECTORS,
-  SELECTORS,
   findComposerActions,
   findComposerDock,
   findComposerEditor,
@@ -13,9 +11,11 @@ import {
   isDraftChanged,
   isOpencodePage,
   isQuestionPromptOpen,
+  LEGACY_SELECTORS,
   rememberDraft,
   replaceText,
   resolveTarget,
+  SELECTORS,
   submitComposer,
   submitPrompt,
   submitQuestion,
@@ -332,6 +332,16 @@ describe("DOM detection", () => {
 
     expect(findComposerActions()).toBe(visible.actions);
     expect(findComposerEditor()).toBe(visible.editor);
+  });
+
+  it("ignores a stale visibility-hidden composer left after a session switch", () => {
+    const active = addComposer();
+    const stale = addComposer();
+    stale.dock.style.visibility = "hidden";
+
+    expect(findComposerDock()).toBe(active.dock);
+    expect(findComposerEditor()).toBe(active.editor);
+    expect(findComposerActions()).toBe(active.actions);
   });
 
   it("reports a disabled composer submit button as busy", () => {

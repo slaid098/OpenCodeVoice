@@ -1,30 +1,30 @@
 import { describe, expect, it } from "vitest";
 import {
-  CONFIG_KEY,
-  DEFAULT_CLEANUP_PROMPT_EN,
-  DEFAULT_CLEANUP_PROMPT_RU,
-  LEGACY_OPENAI_STT,
-  LLM_PRESETS,
-  STT_PRESETS,
   applyLlmPreset,
   applySttPreset,
+  CONFIG_KEY,
   createDefaultConfig,
+  DEFAULT_CLEANUP_PROMPT_EN,
+  DEFAULT_CLEANUP_PROMPT_RU,
   defaultCleanupPrompt,
   getCleanupPrompt,
   isFirstRun,
+  LEGACY_OPENAI_STT,
+  LLM_PRESETS,
   loadConfig,
   registerMenuCommands,
   resolveSttEndpoint,
   resolveSttModel,
+  STT_PRESETS,
   saveConfig,
   validateConfig,
 } from "../src/config.js";
 import type { AppConfig, LlmProviderId, SttProviderId } from "../src/types.js";
 import {
-  GM_getValue,
-  GM_setValue,
   __getMenuCommands,
   __getMockStore,
+  GM_getValue,
+  GM_setValue,
 } from "./__mocks__/$/index.js";
 
 function storedConfig(): AppConfig {
@@ -72,7 +72,7 @@ describe("defaults and presets", () => {
         autoSubmitQuestion: false,
         fallbackToRaw: true,
         saveFailedAudio: true,
-        maxRecordingSeconds: 120,
+        maxRecordingSeconds: 600,
       },
       retry: {
         maxAttempts: 3,
@@ -87,6 +87,10 @@ describe("defaults and presets", () => {
     expect(createDefaultConfig("ru").llm.prompt).toBe(DEFAULT_CLEANUP_PROMPT_RU);
     expect(defaultCleanupPrompt("en")).toBe(DEFAULT_CLEANUP_PROMPT_EN);
     expect(defaultCleanupPrompt("ru")).toBe(DEFAULT_CLEANUP_PROMPT_RU);
+  });
+
+  it("defaults the recording limit to 10 minutes", () => {
+    expect(createDefaultConfig().behavior.maxRecordingSeconds).toBe(600);
   });
 
   it("returns independent objects", () => {

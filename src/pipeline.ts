@@ -32,6 +32,7 @@ export interface RecoveryActions {
 export interface PipelineUi {
   setState(state: DictationPhase, elapsedSeconds?: number): void;
   toast(message: string, options?: ToastOptions): void;
+  hideToast(): void;
   showRecovery(record: FailedDictation, actions: RecoveryActions): void;
   hideRecovery(): void;
   openSettings(): void;
@@ -193,6 +194,7 @@ export function createPipeline(deps: PipelineDeps): Pipeline {
     if (phase !== "idle") {
       return;
     }
+    deps.ui.hideToast();
     target = nextTarget;
     originPath = deps.getSessionPath();
     deps.rememberDraft(nextTarget);
@@ -238,13 +240,12 @@ export function createPipeline(deps: PipelineDeps): Pipeline {
     const maxSeconds = deps.getConfig().behavior.maxRecordingSeconds;
     limitTimer = setTimeout(() => {
       if (phase === "recording") {
-        deps.ui.toast(t("pipeline.recordLimit", { seconds: maxSeconds }), { durationMs: 3000 });
-        void stop();
+        void stop(true, maxSeconds);
       }
     }, maxSeconds * 1000);
   };
 
-  const stop = async (): Promise<void> => {
+  const stop = async (reachedLimit = false, limitSeconds = 0): Promise<void> => {
     if (phase !== "recording" || !recorder) {
       return;
     }
@@ -283,6 +284,8 @@ export function createPipeline(deps: PipelineDeps): Pipeline {
       target,
       stage: "stt",
       originPath: originPath ?? undefined,
+      limitReached: reachedLimit || undefined,
+      limitSeconds: reachedLimit ? limitSeconds : undefined,
       error: "",
       attempts: 0,
       provider: config.stt.provider,
@@ -466,6 +469,11 @@ export function createPipeline(deps: PipelineDeps): Pipeline {
     }
 
     const config = deps.getConfig();
+    if (record.limitReached) {
+      const seconds = record.limitSeconds ?? config.behavior.maxRecordingSeconds;
+      await finishSuccess(record, t("pipeline.recordLimit", { seconds }), 8000);
+      return;
+    }
     const autoSubmit =
       record.target === "composer"
         ? config.behavior.autoSubmit
@@ -725,7 +733,7 @@ export function createPipeline(deps: PipelineDeps): Pipeline {
   return {
     toggle,
     start,
-    stop,
+    stop: () => stop(),
     cancel,
     retryLast,
     forget,

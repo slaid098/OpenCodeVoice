@@ -90,7 +90,7 @@ export function findComposerDock(): HTMLElement | null {
     (dock) => dock.querySelector(SELECTORS.editor) !== null,
   );
   if (docks.length > 0) {
-    return lastVisible(docks);
+    return lastActive(docks) ?? lastVisible(docks);
   }
   for (const selector of LEGACY_SELECTORS.docks) {
     const candidates = [...document.querySelectorAll<HTMLElement>(selector)];
@@ -101,7 +101,7 @@ export function findComposerDock(): HTMLElement | null {
       return el.querySelector(LEGACY_SELECTORS.editor) !== null;
     });
     if (valid.length > 0) {
-      return lastVisible(valid);
+      return lastActive(valid) ?? lastVisible(valid);
     }
   }
   return null;
@@ -113,18 +113,22 @@ export function findComposerEditor(): HTMLElement | null {
     ? (dock.querySelector<HTMLElement>(SELECTORS.editor) ??
       dock.querySelector<HTMLElement>(LEGACY_SELECTORS.editor))
     : null;
-  if (dockEditor && dockEditor.getClientRects().length > 0) {
+  if (dockEditor && isActiveNode(dockEditor)) {
     return dockEditor;
   }
 
-  // OpenCode can keep a hidden composer from a previous render, and Firefox
-  // Android may not render a dock at all. Prefer the last visible editor over
-  // the first stale one.
+  // OpenCode can keep a hidden composer from a previous session in the DOM,
+  // and Firefox Android may not render a dock at all. Prefer the last active
+  // editor over a later stale one.
   const editors = [
     ...document.querySelectorAll<HTMLElement>(SELECTORS.editor),
     ...document.querySelectorAll<HTMLElement>(LEGACY_SELECTORS.editor),
   ];
-  const visible = editors.filter((editor) => editor.getClientRects().length > 0);
+  const active = lastActive(editors);
+  if (active) {
+    return active;
+  }
+  const visible = editors.filter(isVisibleNode);
   if (visible.length > 0) {
     return visible[visible.length - 1] ?? null;
   }
@@ -168,15 +172,17 @@ export function findComposerActions(): HTMLElement | null {
 
   const globalActions = [
     ...document.querySelectorAll<HTMLElement>(SELECTORS.composerActions),
-  ].filter(
-    (element) =>
-      element.getClientRects().length > 0 && element.closest(SELECTORS.questionDock) === null,
-  );
+  ].filter((element) => isVisibleNode(element) && element.closest(SELECTORS.questionDock) === null);
+  const activeGlobal = globalActions.filter(isActiveNode);
+  if (activeGlobal.length > 0) {
+    return activeGlobal[activeGlobal.length - 1] ?? null;
+  }
   if (globalActions.length > 0) {
     return globalActions[globalActions.length - 1] ?? null;
   }
 
-  const globalSubmit = document.querySelector<HTMLElement>(SELECTORS.submit);
+  const globalSubmits = [...document.querySelectorAll<HTMLElement>(SELECTORS.submit)];
+  const globalSubmit = lastActive(globalSubmits) ?? globalSubmits[globalSubmits.length - 1] ?? null;
   return globalSubmit ? actionRow(globalSubmit, form, dock ?? editor) : null;
 }
 
@@ -571,10 +577,55 @@ function findLastEnabledButton(container: HTMLElement): HTMLButtonElement | null
 }
 
 function isVisibleNode(element: Element | null): boolean {
-  return element instanceof HTMLElement && element.getClientRects().length > 0;
+  if (!(element instanceof HTMLElement) || element.getClientRects().length === 0) {
+    return false;
+  }
+  const style = window.getComputedStyle(element);
+  return style.display !== "none" && style.visibility !== "hidden";
+}
+
+function isOnScreen(element: HTMLElement): boolean {
+  const rect = element.getBoundingClientRect();
+  const width = window.innerWidth || document.documentElement.clientWidth || 0;
+  const height = window.innerHeight || document.documentElement.clientHeight || 0;
+  if (width === 0 || height === 0 || (rect.width === 0 && rect.height === 0)) {
+    return true;
+  }
+  return rect.left >= -1 && rect.top >= -1 && rect.right <= width + 1 && rect.bottom <= height + 1;
+}
+
+function isHittableNode(element: HTMLElement): boolean {
+  const rect = element.getBoundingClientRect();
+  if (rect.width === 0 || rect.height === 0) {
+    return true;
+  }
+  const x = rect.left + rect.width / 2;
+  const y = rect.top + rect.height / 2;
+  if (x < 0 || y < 0 || x > window.innerWidth || y > window.innerHeight) {
+    return false;
+  }
+  let hit: Element | null = null;
+  try {
+    hit = document.elementFromPoint(x, y);
+  } catch {
+    return true;
+  }
+  if (!hit) {
+    return true;
+  }
+  return hit === element || element.contains(hit);
+}
+
+function isActiveNode(element: HTMLElement): boolean {
+  return isVisibleNode(element) && isOnScreen(element) && isHittableNode(element);
+}
+
+function lastActive(elements: HTMLElement[]): HTMLElement | null {
+  const active = elements.filter(isActiveNode);
+  return active[active.length - 1] ?? null;
 }
 
 function lastVisible(elements: HTMLElement[]): HTMLElement {
-  const visible = elements.filter((element) => element.getClientRects().length > 0);
+  const visible = elements.filter(isVisibleNode);
   return visible[visible.length - 1] ?? elements[elements.length - 1];
 }

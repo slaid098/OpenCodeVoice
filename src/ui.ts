@@ -1,7 +1,6 @@
 import { formatTime } from "./audio.js";
-import { type MessageKey, getLocale, t } from "./i18n.js";
+import { getLocale, type MessageKey, t } from "./i18n.js";
 import {
-  SELECTORS,
   findComposerActions,
   findComposerDock,
   findComposerEditor,
@@ -10,6 +9,7 @@ import {
   findQuestionFooter,
   findQuestionHeaderActions,
   findQuestionInput,
+  SELECTORS,
 } from "./insert.js";
 import type { RecoveryActions, ToastOptions } from "./pipeline.js";
 import type { DictationPhase, FailedDictation, InsertTarget } from "./types.js";
@@ -27,6 +27,7 @@ export interface Ui {
   refresh(): void;
   setState(state: DictationPhase, elapsedSeconds?: number): void;
   toast(message: string, options?: ToastOptions): void;
+  hideToast(): void;
   showRecovery(record: FailedDictation, actions: RecoveryActions): void;
   hideRecovery(): void;
   openSettings(): void;
@@ -803,11 +804,28 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
   const isClosedNode = (node: Element): boolean =>
     node.matches("[data-closed]") || node.closest("[data-closed]") !== null;
 
+  /**
+   * A force-mounted drawer can stay `visibility: visible` after closing and
+   * only move off-screen. It must not keep the composer mic removed forever.
+   */
+  const overlapsViewport = (node: HTMLElement): boolean => {
+    if (node.getClientRects().length === 0) {
+      return false;
+    }
+    const rect = node.getBoundingClientRect();
+    const width = window.innerWidth || document.documentElement.clientWidth || 0;
+    const height = window.innerHeight || document.documentElement.clientHeight || 0;
+    if (width === 0 || height === 0 || (rect.width === 0 && rect.height === 0)) {
+      return true;
+    }
+    return rect.right > 0 && rect.bottom > 0 && rect.left < width && rect.top < height;
+  };
+
   /** True while an OpenCode dialog or mobile drawer covers the session. */
   const hasBlockingOverlay = (): boolean =>
     OVERLAY_SELECTORS.some((selector) =>
-      [...document.querySelectorAll(selector)].some(
-        (node) => isRenderedNode(node) && !isClosedNode(node),
+      [...document.querySelectorAll<HTMLElement>(selector)].some(
+        (node) => isRenderedNode(node) && !isClosedNode(node) && overlapsViewport(node),
       ),
     );
 
@@ -903,23 +921,29 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
     return `${window.innerWidth}x${window.innerHeight}|${keyOf(form)}|${keyOf(actions)}`;
   };
 
-  const showComposerFallback = (dock: HTMLElement | null): void => {
-    const dockVisible = dock !== null && isVisibleNode(dock) && isHittable(dock);
+  const showComposerFallback = (dock: HTMLElement | null, form: HTMLElement | null): void => {
+    // Firefox Android may render the composer without a dock. Prefer the dock,
+    // then the visible form, so a temporary fallback stays attached to the
+    // composer instead of floating over the conversation.
+    const anchor =
+      [dock, form].find(
+        (node): node is HTMLElement => node !== null && isRenderedNode(node) && isHittable(node),
+      ) ?? null;
     let container = document.querySelector<HTMLElement>('[data-ocvd="composer-fallback"]');
     if (!container) {
       container = document.createElement("div");
       container.dataset.ocvd = "composer-fallback";
     }
-    container.className = dockVisible
+    container.className = anchor
       ? "ocvd-fallback-actions"
       : "ocvd-floating-actions ocvd-floating-actions--fixed";
 
-    if (dockVisible && dock) {
-      if (container.parentElement !== dock) {
-        dock.appendChild(container);
+    if (anchor) {
+      if (container.parentElement !== anchor) {
+        anchor.appendChild(container);
       }
-      if (window.getComputedStyle(dock).position === "static") {
-        dock.style.position = "relative";
+      if (window.getComputedStyle(anchor).position === "static") {
+        anchor.style.position = "relative";
       }
     } else if (container.parentElement !== document.documentElement) {
       document.documentElement.appendChild(container);
@@ -1010,7 +1034,7 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
       return;
     }
 
-    showComposerFallback(dock);
+    showComposerFallback(dock, form);
 
     // Remember the layout only when the row itself is on screen but our
     // buttons do not fit there. A row hidden by a transient overlay must be
@@ -1250,6 +1274,7 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
     refresh: inject,
     setState,
     toast: showToast,
+    hideToast,
     showRecovery,
     hideRecovery,
     openSettings: options.onOpenSettings,

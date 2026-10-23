@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_CLEANUP_PROMPT_RU, createDefaultConfig } from "../src/config.js";
+import { createDefaultConfig, DEFAULT_CLEANUP_PROMPT_RU } from "../src/config.js";
 import { AbortError, HttpError } from "../src/http.js";
 import {
-  LlmError,
   cleanupText,
   extractOllamaContent,
   extractOpenAiContent,
   formatLlmError,
   joinOpenAiEndpoint,
+  LlmError,
   normalizeOpenAiBase,
   parseContent,
   sanitizeCleanup,

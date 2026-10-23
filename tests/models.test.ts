@@ -2,12 +2,12 @@ import { describe, expect, it } from "vitest";
 import { createDefaultConfig } from "../src/config.js";
 import { AbortError } from "../src/http.js";
 import {
-  ModelsError,
-  ModelsUnsupportedError,
   extractOllamaNames,
   extractOpenAiIds,
   listLlmModels,
   listSttModels,
+  ModelsError,
+  ModelsUnsupportedError,
   sttModelsUrl,
 } from "../src/models.js";
 import type { AppConfig } from "../src/types.js";

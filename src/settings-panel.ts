@@ -1,16 +1,16 @@
 import { GM_info } from "$";
 import {
-  STT_PRESETS,
   applyLlmPreset,
   applySttPreset,
   defaultCleanupPrompt,
+  STT_PRESETS,
   validateConfig,
 } from "./config.js";
 import { isAbortError } from "./http.js";
-import { type MessageKey, getLocale, resolveLocale, setLocale, t } from "./i18n.js";
+import { getLocale, type MessageKey, resolveLocale, setLocale, t } from "./i18n.js";
 import { getSelectorStatus } from "./insert.js";
 import { cleanupText } from "./llm.js";
-import { ModelsUnsupportedError, listLlmModels, listSttModels } from "./models.js";
+import { listLlmModels, listSttModels, ModelsUnsupportedError } from "./models.js";
 import { clearFailures, estimateStorage, listFailures } from "./storage.js";
 import type {
   AppConfig,
@@ -1412,11 +1412,16 @@ export function createSettingsPanel(deps: SettingsPanelDeps): SettingsPanel {
     addNumberInput(
       recordingSection,
       t("settings.behavior.maxRecording"),
-      draft?.behavior.maxRecordingSeconds ?? 120,
+      draft?.behavior.maxRecordingSeconds ?? 600,
       (value) => {
         if (draft) draft.behavior.maxRecordingSeconds = value;
       },
-      { min: 5, max: 600, step: 5 },
+      {
+        min: 5,
+        max: 600,
+        step: 5,
+        hint: t("settings.behavior.maxRecordingHint"),
+      },
     );
     addNumberInput(
       recordingSection,

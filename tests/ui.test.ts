@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { setLocale } from "../src/i18n.js";
 import type { RecoveryActions } from "../src/pipeline.js";
 import type { FailedDictation } from "../src/types.js";
-import { type Ui, createUi } from "../src/ui.js";
+import { createUi, type Ui } from "../src/ui.js";
 
 const created: Ui[] = [];
 
@@ -255,7 +255,7 @@ describe("composer injection", () => {
     expect(onToggle).toHaveBeenCalledWith("composer");
   });
 
-  it("renders a floating fallback when the dock, actions and submit are missing", () => {
+  it("renders a fallback inside the composer form when the dock is missing", () => {
     const { ui } = makeUi();
     const form = document.createElement("form");
     form.setAttribute("data-component", "composer");
@@ -270,12 +270,13 @@ describe("composer injection", () => {
 
     const fallback = document.querySelector<HTMLElement>('[data-ocvd="composer-fallback"]');
     expect(fallback).not.toBeNull();
-    expect(fallback?.classList.contains("ocvd-floating-actions")).toBe(true);
+    expect(fallback?.parentElement).toBe(form);
+    expect(fallback?.classList.contains("ocvd-fallback-actions")).toBe(true);
     expect(fallback?.querySelector('[data-ocvd="composer-mic"]')).not.toBeNull();
     expect(fallback?.querySelector('[data-ocvd="composer-settings"]')).not.toBeNull();
   });
 
-  it("moves the mic from the floating fallback into a later submit row", () => {
+  it("moves the mic from the form fallback into a later submit row", () => {
     const { ui } = makeUi();
     const form = document.createElement("form");
     form.setAttribute("data-component", "composer");
@@ -286,6 +287,9 @@ describe("composer injection", () => {
     form.appendChild(editor);
     document.body.appendChild(form);
     ui.start();
+
+    const fallback = document.querySelector<HTMLElement>('[data-ocvd="composer-fallback"]');
+    expect(fallback?.parentElement).toBe(form);
 
     const row = document.createElement("div");
     const submit = document.createElement("button");
@@ -411,6 +415,31 @@ describe("composer injection", () => {
     expect(slot?.querySelector('[data-ocvd="composer-mic"]')).not.toBeNull();
   });
 
+  it("does not treat an off-screen closed drawer as blocking", () => {
+    const { ui } = makeUi();
+    const { actions: slot } = addComposer();
+    const drawer = document.createElement("div");
+    drawer.setAttribute("data-slot", "mobile-drawer-content");
+    Object.defineProperty(drawer, "getBoundingClientRect", {
+      value: () => ({
+        left: -400,
+        top: 0,
+        right: -100,
+        bottom: 800,
+        width: 300,
+        height: 800,
+        x: -400,
+        y: 0,
+        toJSON: () => ({}),
+      }),
+      configurable: true,
+    });
+    document.body.appendChild(drawer);
+
+    ui.start();
+    expect(slot?.querySelector('[data-ocvd="composer-mic"]')).not.toBeNull();
+  });
+
   it("hides the composer mic while an OpenCode dialog is open", () => {
     const { ui } = makeUi();
     const { actions: slot } = addComposer();
@@ -436,6 +465,18 @@ describe("composer injection", () => {
     expect(stale.actions?.querySelector('[data-ocvd="composer-mic"]')).toBeNull();
     expect(visible.actions?.querySelector('[data-ocvd="composer-mic"]')).not.toBeNull();
     expect(visible.actions?.querySelector('[data-ocvd="composer-settings"]')).not.toBeNull();
+    expect(document.querySelectorAll('[data-ocvd="composer-mic"]')).toHaveLength(1);
+  });
+
+  it("keeps the mic in the active composer after switching sessions", () => {
+    const { ui } = makeUi();
+    const active = addComposer();
+    const stale = addComposer();
+    stale.dock.style.visibility = "hidden";
+    ui.start();
+
+    expect(active.actions?.querySelector('[data-ocvd="composer-mic"]')).not.toBeNull();
+    expect(stale.actions?.querySelector('[data-ocvd="composer-mic"]')).toBeNull();
     expect(document.querySelectorAll('[data-ocvd="composer-mic"]')).toHaveLength(1);
   });
 

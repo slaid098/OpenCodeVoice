@@ -1,5 +1,5 @@
 import { resolveSttEndpoint, resolveSttModel } from "./config.js";
-import { AbortError, HttpError, type RetryHooks, type RetryPolicy, httpRequest } from "./http.js";
+import { AbortError, HttpError, httpRequest, type RetryHooks, type RetryPolicy } from "./http.js";
 import { t } from "./i18n.js";
 import type { AppConfig, SttProviderId, TranscriptionResult } from "./types.js";
 
