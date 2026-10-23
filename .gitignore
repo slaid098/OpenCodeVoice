@@ -3,3 +3,6 @@ dist/
 coverage/
 *.log
 .DS_Store
+
+# Obsolete handoff/ADR/project-map workflow — do not recreate
+docs/

@@ -1,6 +1,10 @@
 # opencode-voice-dictation
 
-Project-specific rules for agents. This file **complements** the global `~/.config/opencode/AGENTS.md` (orchestrator model, pipeline, code style) — it does NOT replace it. Both are loaded together by opencode.
+Project-specific rules for agents. This file **complements** the global `~/.config/opencode/AGENTS.md` (orchestration and code style) — it does NOT replace it. Both are loaded together by opencode.
+
+## Documentation
+
+Do not create `docs/handoff/`, `docs/decisions/`, or `docs/project-map/`. They duplicate PR descriptions and `AGENTS.md` and go stale. `AGENTS.md`, PR descriptions, and git history are the source of truth. `docs/` is ignored so the old workflow cannot be reintroduced by accident.
 
 ## Version bump (CRITICAL)
 
@@ -42,7 +46,7 @@ There are two distribution channels, both on GitHub (`slaid098/OpenCodeVoice`):
 - `dist` — stable userscript. Deployed only from `main` by `deploy.yml` (`git push --force` to an orphan `dist` branch).
 - `dev-dist` — dev userscript. Deployed only from `dev` by `deploy-dev.yml` on every push to `dev`.
 
-GitHub Releases were removed (PR#37, ADR-0005). Stable `@updateURL`/`@downloadURL` point to `dist`, dev ones to `dev-dist`; `@icon` always points to `main/assets/icon.png`. Bumping `@version` + deploying to `dist` is sufficient for stable auto-update.
+GitHub Releases were removed (PR #37). Stable `@updateURL`/`@downloadURL` point to `dist`, dev ones to `dev-dist`; `@icon` always points to `main/assets/icon.png`. Bumping `@version` + deploying to `dist` is sufficient for stable auto-update.
 
 The dev build has a distinct `@name` (`OpenCode Voice Dictation (dev)`) and `@namespace` (`.../dev`), so userscript managers keep it as a separate script and it never replaces the stable install. `deploy-dev.yml` derives the dev version from `package.json` and appends `-dev.<run_number>` (`OCVD_VERSION`), and sets `OCVD_CHANNEL=dev`; `vite.config.ts` switches the identity and URL branch from these env vars. The source version in `package.json`/`vite.config.ts` remains the next stable version.
 
@@ -74,7 +78,7 @@ Force-push is allowed only to `dist` and `dev-dist`, never to `main`. Do not mer
 
 `findComposerEditor()` prefers the visible editor inside the dock, then the last visible editor in the document (a stale hidden composer must not win), then the dock editor/last editor. `findComposerActions()` resolves through that editor first: `composer-actions` inside its form → the form's submit row → the dock's `composer-actions` → the last visible global actions slot outside a question dock → the global submit row. `ui.ts` injects into the resolved row; if no row exists, it places a floating mic above `form[data-component="composer"]`. Keep these fallbacks: Firefox Android may render the composer without `session-composer-dock`.
 
-`LEGACY_SELECTORS` exists only as a fallback for older OpenCode 2 builds; do not extend it for OpenCode 1. Composer submit first checks the submit button: when it is `disabled` or `aria-disabled="true"`, return `false` without dispatching Enter, because OpenCode will not accept the message (the agent is working, the session is blocked, or uploads are pending). Otherwise dispatch a synthetic Enter keydown first, with a click on `[data-action="composer-submit"]` as fallback (ADR 0008).
+`LEGACY_SELECTORS` exists only as a fallback for older OpenCode 2 builds; do not extend it for OpenCode 1. Composer submit first checks the submit button: when it is `disabled` or `aria-disabled="true"`, return `false` without dispatching Enter, because OpenCode will not accept the message (the agent is working, the session is blocked, or uploads are pending). Otherwise dispatch a synthetic Enter keydown first, with a click on `[data-action="composer-submit"]` as fallback.
 
 Question injection picks the container in this order: header actions → footer actions → custom option → legacy form. The header comes first because the footer sits under the options and is often clipped by the bottom edge of a tall question panel, while the header is always on screen. The mic is placed before the last foreign button in the header/footer, and after the field in the custom option. Keep exactly one question mic and move it when the container changes.
 
