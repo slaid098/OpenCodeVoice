@@ -1412,11 +1412,16 @@ export function createSettingsPanel(deps: SettingsPanelDeps): SettingsPanel {
     addNumberInput(
       recordingSection,
       t("settings.behavior.maxRecording"),
-      draft?.behavior.maxRecordingSeconds ?? 120,
+      draft?.behavior.maxRecordingSeconds ?? 600,
       (value) => {
         if (draft) draft.behavior.maxRecordingSeconds = value;
       },
-      { min: 5, max: 600, step: 5 },
+      {
+        min: 5,
+        max: 600,
+        step: 5,
+        hint: t("settings.behavior.maxRecordingHint"),
+      },
     );
     addNumberInput(
       recordingSection,

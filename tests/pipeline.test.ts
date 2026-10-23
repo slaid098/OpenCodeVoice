@@ -27,6 +27,7 @@ interface FakeUi {
   states: Array<{ phase: string; seconds?: number }>;
   toasts: ToastCall[];
   recoveries: Array<{ record: FailedDictation; actions: RecoveryActions }>;
+  hideToastCalls: number;
   hideRecoveryCalls: number;
   settingsOpened: number;
 }
@@ -43,6 +44,9 @@ function makeUi(): FakeUi {
       toast: (message, options) => {
         toasts.push({ message, options });
       },
+      hideToast: () => {
+        fake.hideToastCalls += 1;
+      },
       showRecovery: (record, actions) => {
         recoveries.push({ record, actions });
       },
@@ -56,6 +60,7 @@ function makeUi(): FakeUi {
     states,
     toasts,
     recoveries,
+    hideToastCalls: 0,
     hideRecoveryCalls: 0,
     settingsOpened: 0,
   };
@@ -804,14 +809,41 @@ describe("pipeline lifecycle", () => {
     expect(h.ui.toasts.at(-1)?.options?.actionLabel).toBe("Записать снова");
   });
 
-  it("stops automatically at the recording limit", async () => {
+  it("stops at the recording limit, inserts text, and does not submit", async () => {
     vi.useFakeTimers();
     const h = setup();
     h.config.behavior.maxRecordingSeconds = 1;
     await h.pipeline.start("composer");
     await vi.advanceTimersByTimeAsync(1000);
-    expect(h.ui.toasts.some((toast) => /Достигнут лимит записи/.test(toast.message))).toBe(true);
-    expect(h.submitPrompt).toHaveBeenCalled();
+    expect(h.insertText).toHaveBeenCalledWith("чистый текст", "composer");
+    expect(h.submitPrompt).not.toHaveBeenCalled();
+    const toast = h.ui.toasts.at(-1);
+    expect(toast?.message).toContain("Достигнут лимит записи");
+    expect(toast?.message).toContain("Текст вставлен без отправки");
+    expect(toast?.options?.durationMs).toBe(8000);
+    expect(h.pipeline.getState()).toBe("idle");
+    expect(h.store.records.size).toBe(0);
+  });
+
+  it("hides the previous toast when a new recording starts", async () => {
+    const h = setup();
+    await h.pipeline.start("composer");
+    expect(h.ui.hideToastCalls).toBe(1);
+    await h.pipeline.cancel();
+  });
+
+  it("auto-submits a later manual take after a limit take", async () => {
+    vi.useFakeTimers();
+    const h = setup();
+    h.config.behavior.maxRecordingSeconds = 1;
+    await h.pipeline.start("composer");
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(h.submitPrompt).not.toHaveBeenCalled();
+
+    await h.pipeline.start("composer");
+    await h.pipeline.stop();
+    expect(h.insertText).toHaveBeenCalledTimes(2);
+    expect(h.submitPrompt).toHaveBeenCalledTimes(1);
   });
 
   it("toggle starts and stops recording", async () => {

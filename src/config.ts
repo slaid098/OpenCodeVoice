@@ -106,7 +106,7 @@ export function createDefaultConfig(locale: Locale = "ru"): AppConfig {
       autoSubmitQuestion: false,
       fallbackToRaw: true,
       saveFailedAudio: true,
-      maxRecordingSeconds: 120,
+      maxRecordingSeconds: 600,
     },
     retry: {
       maxAttempts: 3,

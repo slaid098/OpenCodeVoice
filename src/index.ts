@@ -88,6 +88,7 @@ function setup(): void {
   const pipelineUi: PipelineUi = {
     setState: (state, elapsed) => ui?.setState(state, elapsed),
     toast: (message, toastOptions) => ui?.toast(message, toastOptions),
+    hideToast: () => ui?.hideToast(),
     showRecovery: (record, actions) => ui?.showRecovery(record, actions),
     hideRecovery: () => ui?.hideRecovery(),
     openSettings: () => settings?.open(),

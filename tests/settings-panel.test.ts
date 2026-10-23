@@ -888,6 +888,13 @@ describe("behavior tab", () => {
     expect(footerStatus()).toContain("от 5 до 600 секунд");
   });
 
+  it("explains the 10-minute recording limit", () => {
+    openPanel();
+    openTab("behavior");
+    const row = field("Максимальная длительность записи, сек").closest(".field");
+    expect(row?.querySelector(".hint")?.textContent).toContain("рекомендация Groq");
+  });
+
   it("rejects an empty retry count", () => {
     const { deps } = openPanel();
     openTab("behavior");

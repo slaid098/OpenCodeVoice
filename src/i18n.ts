@@ -49,7 +49,8 @@ const ru = {
   "pipeline.retryLabel.llm": "очистки",
   "pipeline.recordStartFailed": "Не удалось начать запись.",
   "pipeline.retry": "Повторить",
-  "pipeline.recordLimit": "Достигнут лимит записи ({seconds} с).",
+  "pipeline.recordLimit":
+    "Достигнут лимит записи ({seconds} с). Текст вставлен без отправки. Продолжить — микрофон.",
   "pipeline.recordStopFailed": "Не удалось остановить запись.",
   "pipeline.recordAgain": "Записать снова",
   "pipeline.sttFailedGeneric": "Ошибка распознавания.",
@@ -256,6 +257,8 @@ const ru = {
     "Позволяет повторить распознавание без повторной записи.",
   "settings.behavior.recordingSection": "Запись и повторы",
   "settings.behavior.maxRecording": "Максимальная длительность записи, сек",
+  "settings.behavior.maxRecordingHint":
+    "10 минут — рекомендация Groq. На лимите текст вставляется без отправки; продолжить можно микрофоном.",
   "settings.behavior.maxAttempts": "Попыток при сетевых ошибках",
   "settings.behavior.maxAttemptsHint":
     "Повторы действуют только для временных ошибок: сеть, 429, 5xx.",
@@ -393,7 +396,8 @@ const en: Record<MessageKey, string> = {
   "pipeline.retryLabel.llm": "cleanup",
   "pipeline.recordStartFailed": "Could not start recording.",
   "pipeline.retry": "Retry",
-  "pipeline.recordLimit": "Recording limit reached ({seconds} s).",
+  "pipeline.recordLimit":
+    "Recording limit reached ({seconds} s). Text inserted without sending. Press the microphone to continue.",
   "pipeline.recordStopFailed": "Could not stop recording.",
   "pipeline.recordAgain": "Record again",
   "pipeline.sttFailedGeneric": "Transcription failed.",
@@ -602,6 +606,8 @@ const en: Record<MessageKey, string> = {
   "settings.behavior.saveFailedAudioHint": "Lets you retry recognition without recording again.",
   "settings.behavior.recordingSection": "Recording and retries",
   "settings.behavior.maxRecording": "Maximum recording length, sec",
+  "settings.behavior.maxRecordingHint":
+    "Groq recommends 10 minutes. At the limit the text is inserted without sending; press the microphone to continue.",
   "settings.behavior.maxAttempts": "Attempts on network errors",
   "settings.behavior.maxAttemptsHint": "Retries apply only to temporary errors: network, 429, 5xx.",
   "settings.diag.infoSection": "Version and page",

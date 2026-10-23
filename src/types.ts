@@ -86,6 +86,10 @@ export interface FailedDictation {
   stage: FailureStage;
   /** Page path where the recording started, e.g. `/server/x/session/y`. */
   originPath?: string;
+  /** True when the recording was stopped by the configured time limit. */
+  limitReached?: boolean;
+  /** Recording limit in seconds when the limit stopped the take. */
+  limitSeconds?: number;
   audio?: ArrayBuffer;
   audioMimeType?: string;
   rawText?: string;

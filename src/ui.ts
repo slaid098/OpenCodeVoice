@@ -27,6 +27,7 @@ export interface Ui {
   refresh(): void;
   setState(state: DictationPhase, elapsedSeconds?: number): void;
   toast(message: string, options?: ToastOptions): void;
+  hideToast(): void;
   showRecovery(record: FailedDictation, actions: RecoveryActions): void;
   hideRecovery(): void;
   openSettings(): void;
@@ -1273,6 +1274,7 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
     refresh: inject,
     setState,
     toast: showToast,
+    hideToast,
     showRecovery,
     hideRecovery,
     openSettings: options.onOpenSettings,

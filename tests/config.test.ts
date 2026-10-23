@@ -72,7 +72,7 @@ describe("defaults and presets", () => {
         autoSubmitQuestion: false,
         fallbackToRaw: true,
         saveFailedAudio: true,
-        maxRecordingSeconds: 120,
+        maxRecordingSeconds: 600,
       },
       retry: {
         maxAttempts: 3,
@@ -87,6 +87,10 @@ describe("defaults and presets", () => {
     expect(createDefaultConfig("ru").llm.prompt).toBe(DEFAULT_CLEANUP_PROMPT_RU);
     expect(defaultCleanupPrompt("en")).toBe(DEFAULT_CLEANUP_PROMPT_EN);
     expect(defaultCleanupPrompt("ru")).toBe(DEFAULT_CLEANUP_PROMPT_RU);
+  });
+
+  it("defaults the recording limit to 10 minutes", () => {
+    expect(createDefaultConfig().behavior.maxRecordingSeconds).toBe(600);
   });
 
   it("returns independent objects", () => {
