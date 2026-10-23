@@ -415,6 +415,31 @@ describe("composer injection", () => {
     expect(slot?.querySelector('[data-ocvd="composer-mic"]')).not.toBeNull();
   });
 
+  it("does not treat an off-screen closed drawer as blocking", () => {
+    const { ui } = makeUi();
+    const { actions: slot } = addComposer();
+    const drawer = document.createElement("div");
+    drawer.setAttribute("data-slot", "mobile-drawer-content");
+    Object.defineProperty(drawer, "getBoundingClientRect", {
+      value: () => ({
+        left: -400,
+        top: 0,
+        right: -100,
+        bottom: 800,
+        width: 300,
+        height: 800,
+        x: -400,
+        y: 0,
+        toJSON: () => ({}),
+      }),
+      configurable: true,
+    });
+    document.body.appendChild(drawer);
+
+    ui.start();
+    expect(slot?.querySelector('[data-ocvd="composer-mic"]')).not.toBeNull();
+  });
+
   it("hides the composer mic while an OpenCode dialog is open", () => {
     const { ui } = makeUi();
     const { actions: slot } = addComposer();
@@ -440,6 +465,18 @@ describe("composer injection", () => {
     expect(stale.actions?.querySelector('[data-ocvd="composer-mic"]')).toBeNull();
     expect(visible.actions?.querySelector('[data-ocvd="composer-mic"]')).not.toBeNull();
     expect(visible.actions?.querySelector('[data-ocvd="composer-settings"]')).not.toBeNull();
+    expect(document.querySelectorAll('[data-ocvd="composer-mic"]')).toHaveLength(1);
+  });
+
+  it("keeps the mic in the active composer after switching sessions", () => {
+    const { ui } = makeUi();
+    const active = addComposer();
+    const stale = addComposer();
+    stale.dock.style.visibility = "hidden";
+    ui.start();
+
+    expect(active.actions?.querySelector('[data-ocvd="composer-mic"]')).not.toBeNull();
+    expect(stale.actions?.querySelector('[data-ocvd="composer-mic"]')).toBeNull();
     expect(document.querySelectorAll('[data-ocvd="composer-mic"]')).toHaveLength(1);
   });
 

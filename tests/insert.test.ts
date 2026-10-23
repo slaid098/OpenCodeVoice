@@ -334,6 +334,16 @@ describe("DOM detection", () => {
     expect(findComposerEditor()).toBe(visible.editor);
   });
 
+  it("ignores a stale visibility-hidden composer left after a session switch", () => {
+    const active = addComposer();
+    const stale = addComposer();
+    stale.dock.style.visibility = "hidden";
+
+    expect(findComposerDock()).toBe(active.dock);
+    expect(findComposerEditor()).toBe(active.editor);
+    expect(findComposerActions()).toBe(active.actions);
+  });
+
   it("reports a disabled composer submit button as busy", () => {
     const { submit } = addComposer();
     expect(isComposerSubmitBusy()).toBe(false);

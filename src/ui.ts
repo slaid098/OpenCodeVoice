@@ -803,11 +803,28 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
   const isClosedNode = (node: Element): boolean =>
     node.matches("[data-closed]") || node.closest("[data-closed]") !== null;
 
+  /**
+   * A force-mounted drawer can stay `visibility: visible` after closing and
+   * only move off-screen. It must not keep the composer mic removed forever.
+   */
+  const overlapsViewport = (node: HTMLElement): boolean => {
+    if (node.getClientRects().length === 0) {
+      return false;
+    }
+    const rect = node.getBoundingClientRect();
+    const width = window.innerWidth || document.documentElement.clientWidth || 0;
+    const height = window.innerHeight || document.documentElement.clientHeight || 0;
+    if (width === 0 || height === 0 || (rect.width === 0 && rect.height === 0)) {
+      return true;
+    }
+    return rect.right > 0 && rect.bottom > 0 && rect.left < width && rect.top < height;
+  };
+
   /** True while an OpenCode dialog or mobile drawer covers the session. */
   const hasBlockingOverlay = (): boolean =>
     OVERLAY_SELECTORS.some((selector) =>
-      [...document.querySelectorAll(selector)].some(
-        (node) => isRenderedNode(node) && !isClosedNode(node),
+      [...document.querySelectorAll<HTMLElement>(selector)].some(
+        (node) => isRenderedNode(node) && !isClosedNode(node) && overlapsViewport(node),
       ),
     );
 
