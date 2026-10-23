@@ -7,7 +7,7 @@ const DESCRIPTION =
   "Voice dictation for OpenCode 2 web: Whisper (Groq) or a custom OpenAI-compatible STT endpoint, optional LLM cleanup, RU/EN UI, auto-submit, recovery — works on PC and mobile";
 
 const dev = process.env.OCVD_CHANNEL === "dev";
-const version = process.env.OCVD_VERSION || "0.9.9";
+const version = process.env.OCVD_VERSION || "0.9.10";
 const rawBase = `https://raw.githubusercontent.com/${REPOSITORY}/${dev ? "dev-dist" : "dist"}`;
 
 export default defineConfig({

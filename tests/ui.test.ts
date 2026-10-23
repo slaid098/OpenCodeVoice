@@ -363,6 +363,35 @@ describe("composer injection", () => {
     expect(document.querySelector('button[data-ocvd="question-mic"]')).not.toBeNull();
   });
 
+  it("keeps the fallback on the composer when the row is covered", () => {
+    const hit = vi.spyOn(document, "elementFromPoint").mockReturnValue(document.body);
+    const { ui } = makeUi();
+    const { dock, actions: slot } = addComposer();
+    if (slot) {
+      Object.defineProperty(slot, "getBoundingClientRect", {
+        value: () => ({
+          left: 0,
+          top: 0,
+          right: 300,
+          bottom: 50,
+          width: 300,
+          height: 50,
+          x: 0,
+          y: 0,
+          toJSON: () => ({}),
+        }),
+        configurable: true,
+      });
+    }
+    ui.start();
+
+    const fallback = document.querySelector<HTMLElement>('[data-ocvd="composer-fallback"]');
+    expect(fallback).not.toBeNull();
+    expect(fallback?.parentElement).toBe(dock);
+    expect(fallback?.classList.contains("ocvd-floating-actions--fixed")).toBe(false);
+    hit.mockRestore();
+  });
+
   it("uses a fixed fallback when the whole composer dock is hidden", () => {
     const { ui } = makeUi();
     addSessionPanel();
@@ -379,6 +408,37 @@ describe("composer injection", () => {
     expect(fallback?.parentElement).toBe(document.documentElement);
     expect(fallback?.classList.contains("ocvd-floating-actions--fixed")).toBe(true);
     expect(fallback?.querySelector('[data-ocvd="composer-mic"]')).not.toBeNull();
+  });
+
+  it("removes the old controls and waits after a session switch", () => {
+    vi.useFakeTimers();
+    const { ui } = makeUi();
+    addSessionPanel();
+    const previous = addComposer();
+    ui.start();
+    expect(previous.actions?.querySelector('[data-ocvd="composer-mic"]')).not.toBeNull();
+
+    window.history.pushState({}, "", "/server/local/session/next");
+    ui.refresh();
+    expect(previous.actions?.querySelector('[data-ocvd="composer-mic"]')).toBeNull();
+
+    previous.dock.remove();
+    const next = addComposer();
+    for (const node of [next.dock, next.editor, next.actions]) {
+      if (node) {
+        Object.defineProperty(node, "getClientRects", { value: () => [], configurable: true });
+      }
+    }
+
+    ui.refresh();
+    expect(document.querySelector('[data-ocvd="composer-fallback"]')).toBeNull();
+    expect(document.querySelector('button[data-ocvd="composer-mic"]')).toBeNull();
+
+    vi.advanceTimersByTime(1000);
+    ui.refresh();
+    const fallback = document.querySelector<HTMLElement>('[data-ocvd="composer-fallback"]');
+    expect(fallback?.classList.contains("ocvd-floating-actions--fixed")).toBe(true);
+    window.history.replaceState({}, "", "/");
   });
 
   it("does not float a composer fallback on the home page with a stale hidden composer", () => {

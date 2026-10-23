@@ -61,6 +61,9 @@ const RETRY_KEY: Record<FailedDictation["stage"], MessageKey> = {
 /** Retry a layout that could not fit our buttons after this pause. */
 const ROW_RETRY_MS = 15_000;
 
+/** Keep composer controls out of a session switch until the new one settles. */
+const SESSION_SETTLE_MS = 1_000;
+
 /** OpenCode modal layers that cover the session and make the composer unusable. */
 const OVERLAY_SELECTORS = [
   '[data-component="dialog-overlay"]',
@@ -76,9 +79,12 @@ export function createUi(options: UiOptions): Ui {
   let started = false;
   let observer: MutationObserver | null = null;
   let scheduled: ReturnType<typeof setTimeout> | null = null;
+  let settleTimer: ReturnType<typeof setTimeout> | null = null;
   let heartbeat: ReturnType<typeof setInterval> | null = null;
   let toastTimer: ReturnType<typeof setTimeout> | null = null;
   let blockedActions: { node: HTMLElement; key: string; until: number } | null = null;
+  let currentPath = "";
+  let sessionChangedAt = 0;
 
   let host: HTMLElement | null = null;
   let shadow: ShadowRoot | null = null;
@@ -840,9 +846,11 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
     );
 
   const removeComposerUi = (): void => {
-    document.querySelector('[data-ocvd="composer-fallback"]')?.remove();
-    document.querySelector('button[data-ocvd="composer-mic"]')?.remove();
-    document.querySelector('button[data-ocvd="composer-settings"]')?.remove();
+    for (const node of document.querySelectorAll(
+      '[data-ocvd="composer-fallback"], button[data-ocvd="composer-mic"], button[data-ocvd="composer-settings"]',
+    )) {
+      node.remove();
+    }
     blockedActions = null;
   };
 
@@ -924,11 +932,14 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
   const showComposerFallback = (dock: HTMLElement | null, form: HTMLElement | null): void => {
     // Firefox Android may render the composer without a dock. Prefer the dock,
     // then the visible form, so a temporary fallback stays attached to the
-    // composer instead of floating over the conversation.
+    // composer instead of floating over the conversation. A rendered composer
+    // can be temporarily covered during a session transition; anchoring to it
+    // is still better than a fixed panel over the chat.
     const anchor =
       [dock, form].find(
-        (node): node is HTMLElement => node !== null && isRenderedNode(node) && isHittable(node),
+        (node): node is HTMLElement => node !== null && isRenderedNode(node) && isOnScreen(node),
       ) ?? null;
+
     let container = document.querySelector<HTMLElement>('[data-ocvd="composer-fallback"]');
     if (!container) {
       container = document.createElement("div");
@@ -962,6 +973,10 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
   };
 
   const injectComposer = (): void => {
+    if (sessionChangedAt > 0 && Date.now() - sessionChangedAt < SESSION_SETTLE_MS) {
+      removeComposerUi();
+      return;
+    }
     const actions = findComposerActions();
     const editor = findComposerEditor();
     const form = findComposerForm(editor);
@@ -1141,6 +1156,19 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
     if (!document.documentElement) {
       return;
     }
+    const path = window.location.pathname + window.location.search;
+    if (currentPath !== "" && path !== currentPath) {
+      sessionChangedAt = Date.now();
+      removeComposerUi();
+      if (settleTimer) {
+        clearTimeout(settleTimer);
+      }
+      settleTimer = setTimeout(() => {
+        settleTimer = null;
+        scheduleInject();
+      }, SESSION_SETTLE_MS);
+    }
+    currentPath = path;
     ensureStyle();
     ensureHost();
     injectComposer();
@@ -1245,10 +1273,17 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
       clearTimeout(scheduled);
       scheduled = null;
     }
+    if (settleTimer) {
+      clearTimeout(settleTimer);
+      settleTimer = null;
+    }
     hideToast();
     window.removeEventListener("pageshow", scheduleInject);
     window.removeEventListener("popstate", scheduleInject);
     document.removeEventListener("visibilitychange", onVisibilityChange);
+    currentPath = "";
+    sessionChangedAt = 0;
+    settleTimer = null;
     for (const node of document.querySelectorAll(
       '[data-ocvd="composer-mic"], [data-ocvd="question-mic"], [data-ocvd="composer-settings"], [data-ocvd="composer-fallback"], [data-ocvd="question-fallback"]',
     )) {
