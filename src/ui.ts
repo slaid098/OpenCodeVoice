@@ -61,7 +61,7 @@ const RETRY_KEY: Record<FailedDictation["stage"], MessageKey> = {
 /** Retry a layout that could not fit our buttons after this pause. */
 const ROW_RETRY_MS = 15_000;
 
-/** Keep composer controls out of a session switch until the new one settles. */
+/** Do not float a fixed fallback while a new session is still settling. */
 const SESSION_SETTLE_MS = 1_000;
 
 /** OpenCode modal layers that cover the session and make the composer unusable. */
@@ -154,13 +154,14 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
   animation: ocvd-spin-page 0.8s linear infinite;
 }
 .ocvd-fallback-actions {
-  position: absolute;
-  right: 56px;
-  bottom: 8px;
   z-index: 2147482999;
-  display: inline-flex;
+  display: flex;
+  flex: 1 0 100%;
   gap: 2px;
   align-items: center;
+  justify-content: flex-end;
+  width: 100%;
+  padding: 4px 6px 0;
   pointer-events: auto;
 }
 .ocvd-floating-actions {
@@ -918,6 +919,20 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
     return hit === node || node.contains(hit);
   };
 
+  /** True when every button stays inside the actions row, not merely on screen. */
+  const fitsInside = (container: HTMLElement, nodes: HTMLElement[]): boolean => {
+    const bounds = container.getBoundingClientRect();
+    return nodes.every((node) => {
+      const rect = node.getBoundingClientRect();
+      return (
+        rect.left >= bounds.left - 1 &&
+        rect.top >= bounds.top - 1 &&
+        rect.right <= bounds.right + 1 &&
+        rect.bottom <= bounds.bottom + 1
+      );
+    });
+  };
+
   const composerKey = (actions: HTMLElement, form: HTMLElement | null): string => {
     const keyOf = (node: Element | null): string => {
       if (!(node instanceof HTMLElement) || node.getClientRects().length === 0) {
@@ -929,7 +944,11 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
     return `${window.innerWidth}x${window.innerHeight}|${keyOf(form)}|${keyOf(actions)}`;
   };
 
-  const showComposerFallback = (dock: HTMLElement | null, form: HTMLElement | null): void => {
+  const showComposerFallback = (
+    dock: HTMLElement | null,
+    form: HTMLElement | null,
+    allowFixed: boolean,
+  ): void => {
     // Firefox Android may render the composer without a dock. Prefer the dock,
     // then the visible form, so a temporary fallback stays attached to the
     // composer instead of floating over the conversation. A rendered composer
@@ -939,6 +958,11 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
       [dock, form].find(
         (node): node is HTMLElement => node !== null && isRenderedNode(node) && isOnScreen(node),
       ) ?? null;
+
+    if (!anchor && !allowFixed) {
+      removeComposerUi();
+      return;
+    }
 
     let container = document.querySelector<HTMLElement>('[data-ocvd="composer-fallback"]');
     if (!container) {
@@ -952,9 +976,6 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
     if (anchor) {
       if (container.parentElement !== anchor) {
         anchor.appendChild(container);
-      }
-      if (window.getComputedStyle(anchor).position === "static") {
-        anchor.style.position = "relative";
       }
     } else if (container.parentElement !== document.documentElement) {
       document.documentElement.appendChild(container);
@@ -973,10 +994,6 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
   };
 
   const injectComposer = (): void => {
-    if (sessionChangedAt > 0 && Date.now() - sessionChangedAt < SESSION_SETTLE_MS) {
-      removeComposerUi();
-      return;
-    }
     const actions = findComposerActions();
     const editor = findComposerEditor();
     const form = findComposerForm(editor);
@@ -1029,7 +1046,13 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
       }
       fallback?.remove();
 
-      if (isVisibleNode(actions) && isOnScreen(actions) && isHittable(mic) && isHittable(gear)) {
+      if (
+        isVisibleNode(actions) &&
+        isOnScreen(actions) &&
+        fitsInside(actions, [mic, gear]) &&
+        isHittable(mic) &&
+        isHittable(gear)
+      ) {
         blockedActions = null;
         return;
       }
@@ -1049,7 +1072,7 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
       return;
     }
 
-    showComposerFallback(dock, form);
+    showComposerFallback(dock, form, Date.now() - sessionChangedAt >= SESSION_SETTLE_MS);
 
     // Remember the layout only when the row itself is on screen but our
     // buttons do not fit there. A row hidden by a transient overlay must be

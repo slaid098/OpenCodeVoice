@@ -392,6 +392,45 @@ describe("composer injection", () => {
     hit.mockRestore();
   });
 
+  it("moves buttons out of a row that cannot fit them", () => {
+    const original = HTMLElement.prototype.getBoundingClientRect;
+    const rect = (left: number, top: number, right: number, bottom: number): DOMRect => ({
+      left,
+      top,
+      right,
+      bottom,
+      width: right - left,
+      height: bottom - top,
+      x: left,
+      y: top,
+      toJSON: () => ({}),
+    });
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      if (this.matches('[data-slot="composer-actions"]')) {
+        return rect(0, 0, 100, 50);
+      }
+      if (this.matches('button[data-ocvd="composer-mic"]')) {
+        return rect(200, 0, 248, 48);
+      }
+      if (this.matches('button[data-ocvd="composer-settings"]')) {
+        return rect(150, 0, 198, 48);
+      }
+      return original.call(this);
+    });
+
+    const { ui } = makeUi();
+    const { dock } = addComposer();
+    ui.start();
+
+    const fallback = document.querySelector<HTMLElement>('[data-ocvd="composer-fallback"]');
+    expect(fallback).not.toBeNull();
+    expect(fallback?.parentElement).toBe(dock);
+    expect(fallback?.classList.contains("ocvd-fallback-actions")).toBe(true);
+    vi.restoreAllMocks();
+  });
+
   it("uses a fixed fallback when the whole composer dock is hidden", () => {
     const { ui } = makeUi();
     addSessionPanel();
@@ -410,19 +449,31 @@ describe("composer injection", () => {
     expect(fallback?.querySelector('[data-ocvd="composer-mic"]')).not.toBeNull();
   });
 
-  it("removes the old controls and waits after a session switch", () => {
+  it("puts the mic into the new composer after a session switch", () => {
+    const { ui } = makeUi();
+    const previous = addComposer();
+    ui.start();
+
+    window.history.pushState({}, "", "/server/local/session/next");
+    previous.dock.remove();
+    const next = addComposer();
+    ui.refresh();
+
+    expect(next.actions?.querySelector('[data-ocvd="composer-mic"]')).not.toBeNull();
+    expect(next.actions?.querySelector('[data-ocvd="composer-settings"]')).not.toBeNull();
+    expect(document.querySelectorAll('[data-ocvd="composer-mic"]')).toHaveLength(1);
+    window.history.replaceState({}, "", "/");
+  });
+
+  it("does not float a fallback immediately after a session switch", () => {
     vi.useFakeTimers();
     const { ui } = makeUi();
     addSessionPanel();
     const previous = addComposer();
     ui.start();
-    expect(previous.actions?.querySelector('[data-ocvd="composer-mic"]')).not.toBeNull();
+    previous.dock.remove();
 
     window.history.pushState({}, "", "/server/local/session/next");
-    ui.refresh();
-    expect(previous.actions?.querySelector('[data-ocvd="composer-mic"]')).toBeNull();
-
-    previous.dock.remove();
     const next = addComposer();
     for (const node of [next.dock, next.editor, next.actions]) {
       if (node) {
