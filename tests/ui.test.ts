@@ -255,7 +255,7 @@ describe("composer injection", () => {
     expect(onToggle).toHaveBeenCalledWith("composer");
   });
 
-  it("renders a floating fallback when the dock, actions and submit are missing", () => {
+  it("renders a fallback inside the composer form when the dock is missing", () => {
     const { ui } = makeUi();
     const form = document.createElement("form");
     form.setAttribute("data-component", "composer");
@@ -270,12 +270,13 @@ describe("composer injection", () => {
 
     const fallback = document.querySelector<HTMLElement>('[data-ocvd="composer-fallback"]');
     expect(fallback).not.toBeNull();
-    expect(fallback?.classList.contains("ocvd-floating-actions")).toBe(true);
+    expect(fallback?.parentElement).toBe(form);
+    expect(fallback?.classList.contains("ocvd-fallback-actions")).toBe(true);
     expect(fallback?.querySelector('[data-ocvd="composer-mic"]')).not.toBeNull();
     expect(fallback?.querySelector('[data-ocvd="composer-settings"]')).not.toBeNull();
   });
 
-  it("moves the mic from the floating fallback into a later submit row", () => {
+  it("moves the mic from the form fallback into a later submit row", () => {
     const { ui } = makeUi();
     const form = document.createElement("form");
     form.setAttribute("data-component", "composer");
@@ -286,6 +287,9 @@ describe("composer injection", () => {
     form.appendChild(editor);
     document.body.appendChild(form);
     ui.start();
+
+    const fallback = document.querySelector<HTMLElement>('[data-ocvd="composer-fallback"]');
+    expect(fallback?.parentElement).toBe(form);
 
     const row = document.createElement("div");
     const submit = document.createElement("button");

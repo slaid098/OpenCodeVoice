@@ -903,23 +903,29 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
     return `${window.innerWidth}x${window.innerHeight}|${keyOf(form)}|${keyOf(actions)}`;
   };
 
-  const showComposerFallback = (dock: HTMLElement | null): void => {
-    const dockVisible = dock !== null && isVisibleNode(dock) && isHittable(dock);
+  const showComposerFallback = (dock: HTMLElement | null, form: HTMLElement | null): void => {
+    // Firefox Android may render the composer without a dock. Prefer the dock,
+    // then the visible form, so a temporary fallback stays attached to the
+    // composer instead of floating over the conversation.
+    const anchor =
+      [dock, form].find(
+        (node): node is HTMLElement => node !== null && isRenderedNode(node) && isHittable(node),
+      ) ?? null;
     let container = document.querySelector<HTMLElement>('[data-ocvd="composer-fallback"]');
     if (!container) {
       container = document.createElement("div");
       container.dataset.ocvd = "composer-fallback";
     }
-    container.className = dockVisible
+    container.className = anchor
       ? "ocvd-fallback-actions"
       : "ocvd-floating-actions ocvd-floating-actions--fixed";
 
-    if (dockVisible && dock) {
-      if (container.parentElement !== dock) {
-        dock.appendChild(container);
+    if (anchor) {
+      if (container.parentElement !== anchor) {
+        anchor.appendChild(container);
       }
-      if (window.getComputedStyle(dock).position === "static") {
-        dock.style.position = "relative";
+      if (window.getComputedStyle(anchor).position === "static") {
+        anchor.style.position = "relative";
       }
     } else if (container.parentElement !== document.documentElement) {
       document.documentElement.appendChild(container);
@@ -1010,7 +1016,7 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
       return;
     }
 
-    showComposerFallback(dock);
+    showComposerFallback(dock, form);
 
     // Remember the layout only when the row itself is on screen but our
     // buttons do not fit there. A row hidden by a transient overlay must be
