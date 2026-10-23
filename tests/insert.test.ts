@@ -167,6 +167,21 @@ describe("DOM detection", () => {
     expect(findComposerDock()).not.toBeNull();
   });
 
+  it("detects the OpenCode app shell before a composer mounts", () => {
+    expect(isOpencodePage()).toBe(false);
+
+    const titlebar = document.createElement("div");
+    titlebar.setAttribute("data-slot", "titlebar-v2");
+    document.body.appendChild(titlebar);
+    expect(isOpencodePage()).toBe(true);
+
+    titlebar.remove();
+    const home = document.createElement("div");
+    home.setAttribute("data-slot", "home-panel");
+    document.body.appendChild(home);
+    expect(isOpencodePage()).toBe(true);
+  });
+
   it("detects question prompts in the current DOM", () => {
     expect(isQuestionPromptOpen()).toBe(false);
     const { field, footer } = addQuestion();

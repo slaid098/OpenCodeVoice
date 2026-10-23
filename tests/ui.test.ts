@@ -123,6 +123,13 @@ function addQuestion(
   return { dock, option, field, footer, header };
 }
 
+function addSessionPanel(): HTMLElement {
+  const panel = document.createElement("div");
+  panel.setAttribute("data-slot", "session-chat-panel");
+  document.body.appendChild(panel);
+  return panel;
+}
+
 function overlay(): ShadowRoot | null {
   return document.querySelector<HTMLElement>('[data-ocvd-ui="overlay"]')?.shadowRoot ?? null;
 }
@@ -354,6 +361,7 @@ describe("composer injection", () => {
 
   it("uses a fixed fallback when the whole composer dock is hidden", () => {
     const { ui } = makeUi();
+    addSessionPanel();
     const { dock, editor, actions: slot } = addComposer();
     for (const node of [dock, editor, slot]) {
       if (node) {
@@ -367,6 +375,55 @@ describe("composer injection", () => {
     expect(fallback?.parentElement).toBe(document.documentElement);
     expect(fallback?.classList.contains("ocvd-floating-actions--fixed")).toBe(true);
     expect(fallback?.querySelector('[data-ocvd="composer-mic"]')).not.toBeNull();
+  });
+
+  it("does not float a composer fallback on the home page with a stale hidden composer", () => {
+    const { ui } = makeUi();
+    const { dock, editor, actions: slot } = addComposer();
+    for (const node of [dock, editor, slot]) {
+      if (node) {
+        Object.defineProperty(node, "getClientRects", { value: () => [], configurable: true });
+      }
+    }
+    const home = document.createElement("div");
+    home.setAttribute("data-slot", "home-panel");
+    document.body.appendChild(home);
+    ui.start();
+
+    expect(document.querySelector('[data-ocvd="composer-fallback"]')).toBeNull();
+    expect(document.querySelector('button[data-ocvd="composer-mic"]')).toBeNull();
+    expect(document.querySelector('button[data-ocvd="composer-settings"]')).toBeNull();
+  });
+
+  it("hides the composer mic while the mobile tabs drawer is open", () => {
+    const { ui } = makeUi();
+    const { actions: slot } = addComposer();
+    const drawer = document.createElement("div");
+    drawer.setAttribute("data-slot", "mobile-drawer-content");
+    document.body.appendChild(drawer);
+
+    ui.start();
+    expect(document.querySelector('button[data-ocvd="composer-mic"]')).toBeNull();
+    expect(document.querySelector('button[data-ocvd="composer-settings"]')).toBeNull();
+
+    drawer.setAttribute("data-closed", "");
+    ui.refresh();
+    expect(slot?.querySelector('[data-ocvd="composer-mic"]')).not.toBeNull();
+  });
+
+  it("hides the composer mic while an OpenCode dialog is open", () => {
+    const { ui } = makeUi();
+    const { actions: slot } = addComposer();
+    const dialog = document.createElement("div");
+    dialog.setAttribute("data-component", "dialog-overlay");
+    document.body.appendChild(dialog);
+
+    ui.start();
+    expect(document.querySelector('button[data-ocvd="composer-mic"]')).toBeNull();
+
+    dialog.remove();
+    ui.refresh();
+    expect(slot?.querySelector('[data-ocvd="composer-mic"]')).not.toBeNull();
   });
 
   it("ignores a stale hidden composer when a visible one exists", () => {

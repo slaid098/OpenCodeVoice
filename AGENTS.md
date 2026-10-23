@@ -37,7 +37,16 @@ All user-facing strings go through `t()` from `src/i18n.ts`; never hardcode Russ
 
 ## Dist deploy
 
-The `dist` branch is the **only** distribution channel for the userscript. Deploy happens via `deploy.yml` (plain `git push --force` to an orphan `dist` branch) on push to `main`. GitHub Releases were removed (PR#37, ADR-0005). `@updateURL`/`@downloadURL` point to raw files on the `dist` branch of `slaid098/OpenCodeVoice`, and `@icon` points to `main/assets/icon.png`. Bumping `@version` + deploying to `dist` is sufficient for auto-update. Force-push is allowed only to `dist`, never to `main`.
+There are two distribution channels, both on GitHub (`slaid098/OpenCodeVoice`):
+
+- `dist` — stable userscript. Deployed only from `main` by `deploy.yml` (`git push --force` to an orphan `dist` branch).
+- `dev-dist` — dev userscript. Deployed only from `dev` by `deploy-dev.yml` on every push to `dev`.
+
+GitHub Releases were removed (PR#37, ADR-0005). Stable `@updateURL`/`@downloadURL` point to `dist`, dev ones to `dev-dist`; `@icon` always points to `main/assets/icon.png`. Bumping `@version` + deploying to `dist` is sufficient for stable auto-update.
+
+The dev build has a distinct `@name` (`OpenCode Voice Dictation (dev)`) and `@namespace` (`.../dev`), so userscript managers keep it as a separate script and it never replaces the stable install. `deploy-dev.yml` derives the dev version from `package.json` and appends `-dev.<run_number>` (`OCVD_VERSION`), and sets `OCVD_CHANNEL=dev`; `vite.config.ts` switches the identity and URL branch from these env vars. The source version in `package.json`/`vite.config.ts` remains the next stable version.
+
+Force-push is allowed only to `dist` and `dev-dist`, never to `main`. Do not merge `dev` into `main` until the dev build has been installed and visually checked; CI passing is necessary but not sufficient.
 
 ## `@icon`
 
@@ -45,7 +54,7 @@ The `dist` branch is the **only** distribution channel for the userscript. Deplo
 
 ## `@namespace`
 
-`vite.config.ts` `userscript.namespace` — это ИДЕНТИФИКАТОР скрипта для userscript-менеджеров (Tampermonkey/Violentmonkey используют пару `@name` + `@namespace` для дедупликации, Greasemonkey-стандарт). НЕ функциональный URL — менеджеры НЕ резолвят его. НЕ менять при смене хостинга или переименовании репозитория — смена namespace = userscript-менеджер видит «новый» скрипт → дубликат вместо обновления.
+`vite.config.ts` `userscript.namespace` — это ИДЕНТИФИКАТОР скрипта для userscript-менеджеров (Tampermonkey/Violentmonkey используют пару `@name` + `@namespace` для дедупликации, Greasemonkey-стандарт). НЕ функциональный URL — менеджеры НЕ резолвят его. НЕ менять при смене хостинга или переименовании репозитория — смена namespace = userscript-менеджер видит «новый» скрипт → дубликат вместо обновления. Единственное исключение — dev-сборка: `vite.config.ts` при `OCVD_CHANNEL=dev` намеренно добавляет `/dev` к namespace и ` (dev)` к имени, чтобы dev-скрипт жил отдельной записью и не заменял стабильный.
 
 ## OpenCode 2 selectors
 
@@ -105,9 +114,24 @@ Auto-submit is global, on by default, and is the primary mode. Do NOT add per-re
 - At `max-width: 520px` the four tabs are a 2×2 grid (no horizontal scroll); at `max-width: 480px` the password/model rows and footer wrap, inputs and the Save button take the full width. Buttons use `white-space: nowrap`.
 - Native `<option>` elements need explicit `background: var(--bg)` and `color: var(--fg)`; without it provider names can be white-on-white in the light theme.
 
+## Model pickers
+
+Model selection in Settings uses the custom inline listbox (`addModelInput` in `settings-panel.ts`), not the native `<datalist>`. Firefox for Android does not render datalist suggestions for text inputs, and desktop browsers do not open the datalist after a programmatic "Load models". The list opens automatically after loading, filters while typing, supports ↑/↓ + Enter + Escape, and closes on selection, outside pointerdown, tab switch, and panel close. Escape must close the list before the panel; the panel keydown handler calls `closeActiveModelList()`. The input stays free-form, so a custom model ID that is not in the list still works. Keep the list inside the field: as an inline block it is not clipped by the `.content` scroll container and needs no fixed-position math.
+
+## Page gate
+
+The userscript runs on `*://*/*`, so `isOpencodePage()` is the gate. It must recognize the OpenCode app shell even when no composer is mounted: `[data-slot="titlebar"]` / `[data-slot="titlebar-v2"]`, `[data-slot="home-panel"]`, `[data-slot="session-chat-panel"]`, `[data-component="new-session"]`, in addition to the composer/question selectors. Otherwise loading `/` (the sessions list) can exhaust `waitForOpencode()` before a session is opened, and SPA navigation does not fire `pageshow`/`visibilitychange`, so the mic only appears after a reload.
+
+## Composer mic visibility
+
+- Hide the composer mic while an OpenCode dialog or mobile drawer is open: a rendered `[data-component="dialog-overlay"]` or `[data-slot="mobile-drawer-content"]` without `[data-closed]`. These layers cover the session, and a fixed fallback would float over the session picker.
+- `[data-slot="mobile-drawer-content"]` is force-mounted: check computed `visibility` and `[data-closed]`, not only `getClientRects()`. Observe `data-open`/`data-closed`/`data-closing` so the mic disappears when the drawer opens, not only on the next heartbeat.
+- Hidden stale composers left by an inactive session must not create a floating mic on `/`. A fallback is allowed only when the composer exists (even if temporarily hidden) and either a visible composer surface or a visible `[data-slot="session-chat-panel"]` is present. Otherwise remove the mic, gear and fallback: the home/session-selection screen has no composer mic.
+- On a real session, keep the fallback available while OpenCode temporarily hides the composer; the heartbeat re-injects when it returns.
+
 ## Mic re-injection
 
-`handleMutations()` schedules `inject()` when foreign nodes are added **and** when an Element containing our nodes was removed and is no longer connected. This covers OpenCode deleting only our button without adding anything else. A 1-second heartbeat (`setInterval`, only while `document.visibilityState === "visible"`) is the last-resort safety net; `inject()` must stay idempotent so the heartbeat does not move nodes. Do not remove the heartbeat without an equally reliable replacement. Keep exactly one composer mic and one gear for the whole page (`takeButton`).
+`handleMutations()` schedules `inject()` when foreign nodes are added, when an Element containing our nodes was removed and is no longer connected, and when `data-open`/`data-closed`/`data-closing` changes. This covers OpenCode deleting only our button without adding anything else and the mobile tabs drawer opening. A 1-second heartbeat (`setInterval`, only while `document.visibilityState === "visible"`) is the last-resort safety net; `inject()` must stay idempotent so the heartbeat does not move nodes. Do not remove the heartbeat without an equally reliable replacement. Keep exactly one composer mic and one gear for the whole page (`takeButton`).
 
 When the actions row exists but is invisible, off-screen, or covered (`isVisibleNode`/`isOnScreen`/`isHittable`), move the buttons to a fallback instead of leaving them unavailable: inside a visible composer dock (`ocvd-fallback-actions`), otherwise a fixed floating panel on `document.documentElement` (`ocvd-floating-actions--fixed`). Never move them into a hidden dock. When the row becomes usable again, put the buttons back in front of the submit button and remove the fallback. A row that is visible but cannot fit the buttons is retried after `ROW_RETRY_MS` (15 s) or when its geometry changes. While a visible question dock is open, do not create a composer fallback: the question dock owns the visible mic.
 
