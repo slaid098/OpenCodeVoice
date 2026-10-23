@@ -32,7 +32,15 @@ export const LEGACY_SELECTORS = {
   ],
 } as const;
 
+const APP_SHELL_SELECTORS = [
+  '[data-slot="titlebar"], [data-slot="titlebar-v2"]',
+  '[data-slot="home-panel"]',
+  '[data-slot="session-chat-panel"]',
+  '[data-component="new-session"]',
+];
+
 const PAGE_DETECT_SELECTORS = [
+  ...APP_SHELL_SELECTORS,
   SELECTORS.composerDock,
   SELECTORS.composerForm,
   SELECTORS.editor,

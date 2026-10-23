@@ -60,6 +60,15 @@ const RETRY_KEY: Record<FailedDictation["stage"], MessageKey> = {
 /** Retry a layout that could not fit our buttons after this pause. */
 const ROW_RETRY_MS = 15_000;
 
+/** OpenCode modal layers that cover the session and make the composer unusable. */
+const OVERLAY_SELECTORS = [
+  '[data-component="dialog-overlay"]',
+  '[data-slot="mobile-drawer-content"]',
+];
+
+/** The session screen stays in the DOM when OpenCode hides the composer. */
+const SESSION_SURFACE_SELECTORS = ['[data-slot="session-chat-panel"]'];
+
 export function createUi(options: UiOptions): Ui {
   let phase: DictationPhase = "idle";
   let elapsedSeconds = 0;
@@ -778,6 +787,47 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
   const isVisibleNode = (node: Element | null): boolean =>
     node instanceof HTMLElement && node.getClientRects().length > 0;
 
+  /**
+   * True when the element is laid out and not hidden with `visibility`.
+   * Dialogs and the mobile drawer keep force-mounted nodes in the DOM, so
+   * getClientRects() alone is not enough for them.
+   */
+  const isRenderedNode = (node: Element | null): boolean => {
+    if (!(node instanceof HTMLElement) || node.getClientRects().length === 0) {
+      return false;
+    }
+    const style = window.getComputedStyle(node);
+    return style.display !== "none" && style.visibility !== "hidden";
+  };
+
+  const isClosedNode = (node: Element): boolean =>
+    node.matches("[data-closed]") || node.closest("[data-closed]") !== null;
+
+  /** True while an OpenCode dialog or mobile drawer covers the session. */
+  const hasBlockingOverlay = (): boolean =>
+    OVERLAY_SELECTORS.some((selector) =>
+      [...document.querySelectorAll(selector)].some(
+        (node) => isRenderedNode(node) && !isClosedNode(node),
+      ),
+    );
+
+  /**
+   * The session screen stays rendered while OpenCode replaces the composer
+   * with a request dock, so it distinguishes a real session from the home
+   * page where stale hidden composers can remain in the DOM.
+   */
+  const hasVisibleSessionSurface = (): boolean =>
+    SESSION_SURFACE_SELECTORS.some((selector) =>
+      [...document.querySelectorAll(selector)].some(isRenderedNode),
+    );
+
+  const removeComposerUi = (): void => {
+    document.querySelector('[data-ocvd="composer-fallback"]')?.remove();
+    document.querySelector('button[data-ocvd="composer-mic"]')?.remove();
+    document.querySelector('button[data-ocvd="composer-settings"]')?.remove();
+    blockedActions = null;
+  };
+
   const dedupe = (container: Element, selector: string): HTMLButtonElement | null => {
     const nodes = [...container.querySelectorAll<HTMLButtonElement>(selector)];
     for (const extra of nodes.slice(1)) {
@@ -894,11 +944,23 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
     const dock = findComposerDock();
     const fallback = document.querySelector<HTMLElement>('[data-ocvd="composer-fallback"]');
 
-    if (!actions && !dock && !form) {
-      fallback?.remove();
-      document.querySelector('button[data-ocvd="composer-mic"]')?.remove();
-      document.querySelector('button[data-ocvd="composer-settings"]')?.remove();
-      blockedActions = null;
+    if (hasBlockingOverlay()) {
+      removeComposerUi();
+      return;
+    }
+
+    const hasComposerNodes = Boolean(actions || editor || form || dock);
+    const hasVisibleComposer =
+      isRenderedNode(actions) ||
+      isRenderedNode(editor) ||
+      isRenderedNode(form) ||
+      isRenderedNode(dock);
+
+    // Hidden stale composers from an inactive session must not float a mic on
+    // the home/session-selection screen. On a real session, keep the fallback
+    // available while OpenCode temporarily hides the composer.
+    if (!hasComposerNodes || (!hasVisibleComposer && !hasVisibleSessionSurface())) {
+      removeComposerUi();
       return;
     }
 
@@ -1089,6 +1151,10 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
       if (isOurs(mutation.target)) {
         continue;
       }
+      if (mutation.type === "attributes") {
+        scheduleInject();
+        return;
+      }
       for (const node of mutation.addedNodes) {
         if (!isOurs(node)) {
           scheduleInject();
@@ -1121,7 +1187,12 @@ button.ocvd-btn svg { width: 20px; height: 20px; display: block; }
     started = true;
     inject();
     observer = new MutationObserver(handleMutations);
-    observer.observe(document.documentElement, { childList: true, subtree: true });
+    observer.observe(document.documentElement, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["data-closed", "data-closing", "data-open"],
+    });
     heartbeat = setInterval(() => {
       if (document.visibilityState === "visible") {
         inject();
