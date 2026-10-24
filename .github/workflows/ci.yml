@@ -2,9 +2,9 @@ name: CI
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, dev]
   push:
-    branches: [main]
+    branches: [dev, main]
 
 jobs:
   check:
@@ -30,3 +30,6 @@ jobs:
 
       - name: Test (Vitest + Coverage)
         run: npm run test
+
+      - name: Build
+        run: npm run build
