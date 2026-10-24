@@ -2,15 +2,15 @@
 
 ![Cover](assets/cover.png)
 
-<!-- tagline-en:start -->
 > Voice dictation for OpenCode 2 web: tap the microphone, speak, and send. Whisper via Groq or any OpenAI-compatible speech-to-text endpoint, optional LLM cleanup, RU/EN interface.
-<!-- tagline-en:end -->
 
-<!-- tagline-ru:start -->
 > Голосовой ввод для OpenCode 2 в браузере: нажмите микрофон, говорите и отправляйте. Whisper через Groq или любой OpenAI-совместимый сервис распознавания, необязательная очистка текста моделью и интерфейс на русском и английском.
-<!-- tagline-ru:end -->
 
 [English](#-english) | [Русский](#-русский)
+
+<p align="center">
+  <img src="assets/demo.gif" alt="OpenCodeVoice demo: tap the microphone, say hello, and send" width="320">
+</p>
 
 ## 🇺🇸 English
 
@@ -26,7 +26,6 @@
 
 > On a phone the model name in the composer is shortened so the thinking-mode selector fits next to it. Without that, the selector is pushed off-screen. On a computer the model, thinking-mode, and Plan/Build controls are left as they are.
 
-<!-- summary-en:start -->
 ### ❓ Why
 
 Typing long prompts on a phone is slow and awkward. OpenCodeVoice adds a microphone to the OpenCode composer and to question prompts, so a prompt can be dictated in a few seconds and sent without touching the keyboard.
@@ -34,9 +33,7 @@ Typing long prompts on a phone is slow and awkward. OpenCodeVoice adds a microph
 ### ✅ What
 
 A small userscript that records audio in the browser, sends it to a speech-to-text service, optionally cleans the transcript with an LLM, inserts the result into the active OpenCode field, and sends it when auto-submit is enabled. It also protects the conversation: if you switch chats while a recording is being processed, the text is saved instead of being pasted into the wrong session.
-<!-- summary-en:end -->
 
-<!-- features-en:start -->
 ### Features
 
 | Feature | Description |
@@ -54,7 +51,6 @@ A small userscript that records audio in the browser, sends it to a speech-to-te
 | 🌍 RU / EN | The interface and the default prompts are available in Russian and English. |
 | ⌨️ Hotkeys | `Ctrl+Space` starts and stops dictation, `Esc` cancels it. |
 | 📱 Responsive | Works in the OpenCode web interface on a computer and on a phone (Firefox). |
-<!-- features-en:end -->
 
 ### 🎛 Settings
 
@@ -102,7 +98,6 @@ npm run build
 
 > На телефоне название модели в композере сокращается, чтобы рядом поместился выбор режима мышления. Иначе он уезжает за край экрана. На компьютере модель, выбор режима мышления и переключатель Plan/Build не меняются.
 
-<!-- summary-ru:start -->
 ### ❓ Зачем
 
 Набирать длинные запросы с телефона медленно и неудобно. OpenCodeVoice добавляет микрофон в поле ввода OpenCode и в вопросы, поэтому запрос можно надиктовать за несколько секунд и отправить, не касаясь клавиатуры.
@@ -110,9 +105,7 @@ npm run build
 ### ✅ Что
 
 Небольшой userscript: записывает звук в браузере, отправляет его в сервис распознавания речи, при желании очищает текст моделью, вставляет результат в активное поле OpenCode и отправляет его, если включена автоотправка. Скрипт также защищает диалог: если во время распознавания переключиться на другой чат, текст сохранится, а не вставится в чужую сессию.
-<!-- summary-ru:end -->
 
-<!-- features-ru:start -->
 ### Фичи
 
 | Фича | Описание |
@@ -130,7 +123,6 @@ npm run build
 | 🌍 RU / EN | Интерфейс и стандартные промпты доступны на русском и английском. |
 | ⌨️ Горячие клавиши | `Ctrl+Space` запускает и останавливает диктовку, `Esc` отменяет её. |
 | 📱 Адаптивность | Работает в веб-интерфейсе OpenCode на компьютере и телефоне (Firefox). |
-<!-- features-ru:end -->
 
 ### 🎛 Настройки
 
@@ -166,6 +158,6 @@ npm run build
 
 ---
 
-## 💬 Support and contacts / Поддержка и контакты
+## Contacts / Контакты
 
-👉 **[slaid098.dev/contacts](https://slaid098.dev/contacts)**
+[Telegram](https://t.me/slaid098) · [GitHub](https://github.com/slaid098)

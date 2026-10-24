@@ -54,7 +54,7 @@ Force-push is allowed only to `dist` and `dev-dist`, never to `main`. Do not mer
 
 ## `@icon`
 
-`vite.config.ts` `userscript.icon` → `main/assets/icon.png` (128×128 PNG RGBA) on GitHub (`raw.githubusercontent.com/slaid098/OpenCodeVoice`). Do NOT delete `assets/icon.png` and do NOT change the path without editing both the file location and the `icon` URL in sync. Do not confuse it with `assets/cover.svg`/`assets/cover.png` (README cover, 1024×1024).
+`vite.config.ts` `userscript.icon` → `main/assets/icon.png` (128×128 PNG RGBA) on GitHub (`raw.githubusercontent.com/slaid098/OpenCodeVoice`). Do NOT delete `assets/icon.png` and do NOT change the path without editing both the file location and the `icon` URL in sync. Do not confuse it with `assets/cover.png` (README cover, 1024×1024).
 
 ## `@namespace`
 
