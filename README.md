@@ -84,6 +84,8 @@ npm run test
 npm run build
 ```
 
+**Workflow:** changes go to `dev` via PR; after checks, `dev` → `main`.
+
 ## 🇷🇺 Русский
 
 ### ⚡ Быстрый старт
@@ -155,6 +157,8 @@ npm run typecheck
 npm run test
 npm run build
 ```
+
+**Рабочий процесс:** изменения идут в `dev` через PR; после проверки `dev` → `main`.
 
 ---
 
