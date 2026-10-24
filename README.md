@@ -22,6 +22,8 @@
 4. Paste a Groq API key — a free one is available at [console.groq.com/keys](https://console.groq.com/keys) — or choose a custom endpoint and fill in its URL and model.
 5. Save, tap the microphone, speak, and tap it again.
 
+> **Requirement:** open OpenCode over HTTPS or on `localhost`/`127.0.0.1`. Any domain works — the script detects OpenCode by its UI, not by URL. Plain HTTP (other than localhost) blocks microphone access.
+
 > On a phone the model name in the composer is shortened so the thinking-mode selector fits next to it. Without that, the selector is pushed off-screen. On a computer the model, thinking-mode, and Plan/Build controls are left as they are.
 
 <!-- summary-en:start -->
@@ -95,6 +97,8 @@ npm run build
 3. Откройте веб-интерфейс OpenCode 2 и нажмите шестерёнку рядом с микрофоном.
 4. Вставьте API-ключ Groq — бесплатный можно получить на [console.groq.com/keys](https://console.groq.com/keys) — или выберите свой адрес и укажите его URL и модель.
 5. Сохраните, нажмите микрофон, говорите и нажмите его снова.
+
+> **Требование:** открывайте OpenCode по HTTPS или на `localhost`/`127.0.0.1`. Домен не важен — скрипт определяет OpenCode по интерфейсу, а не по URL. Обычный HTTP (кроме localhost) блокирует доступ к микрофону.
 
 > На телефоне название модели в композере сокращается, чтобы рядом поместился выбор режима мышления. Иначе он уезжает за край экрана. На компьютере модель, выбор режима мышления и переключатель Plan/Build не меняются.
 
