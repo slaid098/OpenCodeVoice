@@ -158,6 +158,4 @@ npm run build
 
 ---
 
-## Contacts / Контакты
-
-[Telegram](https://t.me/slaid098) · [GitHub](https://github.com/slaid098)
+[slaid098.dev](https://slaid098.dev)
